@@ -49,21 +49,61 @@ applezone-backend/
 
 ## API Endpoints & Phân quyền
 
-| Method | Endpoint | Mô tả | Auth | Quyền hạn |
-|---|---|---|---|---|
-| **POST** | `/api/v1/auth/register` | Đăng ký tài khoản | ❌ | Bất kỳ ai |
-| **POST** | `/api/v1/auth/login` | Đăng nhập lấy JWT | ❌ | Bất kỳ ai |
-| **GET** | `/api/v1/products` | Danh sách sản phẩm | ❌ | Bất kỳ ai |
-| **GET** | `/api/v1/products/:id` | Chi tiết sản phẩm + variants | ❌ | Bất kỳ ai |
-| **GET** | `/api/v1/cart` | Lấy giỏ hàng hiện tại | ✅ | Customer |
-| **POST** | `/api/v1/cart/items` | Thêm/cập nhật sản phẩm vào giỏ | ✅ | Customer |
-| **DELETE**| `/api/v1/cart/items/:id`| Xóa sản phẩm khỏi giỏ hàng | ✅ | Customer |
-| **POST** | `/api/v1/orders` | Tạo đơn hàng mới (Trừ kho, dùng mã giảm giá) | ✅ | Customer |
-| **GET** | `/api/v1/orders` | Danh sách đơn hàng cá nhân | ✅ | Customer |
-| **GET** | `/api/v1/orders/:id` | Chi tiết đơn hàng + sản phẩm | ✅ | Customer |
-| **POST** | `/api/v1/payments/:orderId`| Thực hiện thanh toán | ✅ | Customer |
-| **GET** | `/api/v1/admin/orders` | Xem toàn bộ đơn hàng | ✅ | Admin / Staff |
-| **PATCH** | `/api/v1/admin/orders/:id/status`| Cập nhật trạng thái đơn + ghi lịch sử | ✅ | Admin / Staff |
+### 5.4.1 Auth
+| Method | Endpoint | Mô tả | Auth |
+|---|---|---|---|
+| **POST** | `/api/auth/register` | Đăng ký tài khoản khách hàng | Không |
+| **POST** | `/api/auth/login` | Đăng nhập, trả về JWT token | Không |
+| **GET** | `/api/auth/me` | Lấy thông tin user hiện tại | JWT |
+
+### 5.4.2 Products & Categories
+| Method | Endpoint | Mô tả | Auth |
+|---|---|---|---|
+| **GET** | `/api/categories` | Lấy danh sách danh mục | Không |
+| **GET** | `/api/products` | Lấy danh sách sản phẩm (hỗ trợ lọc & phân trang) | Không |
+| **GET** | `/api/products/:id` | Chi tiết một sản phẩm | Không |
+| **GET** | `/api/products/:id/variants` | Lấy tất cả biến thể của sản phẩm | Không |
+| **GET** | `/api/products/category/:catId` | Sản phẩm theo danh mục | Không |
+| **POST** | `/api/admin/products` | Tạo sản phẩm mới | Admin |
+| **PUT** | `/api/admin/products/:id` | Cập nhật sản phẩm | Admin |
+| **DELETE** | `/api/admin/products/:id` | Xóa sản phẩm | Admin |
+
+### 5.4.3 Cart
+| Method | Endpoint | Mô tả | Auth |
+|---|---|---|---|
+| **GET** | `/api/cart` | Lấy giỏ hàng của user hiện tại | JWT |
+| **POST** | `/api/cart/add` | Thêm biến thể vào giỏ hàng | JWT |
+| **PUT** | `/api/cart/items/:itemId` | Cập nhật số lượng một mục trong giỏ | JWT |
+| **DELETE** | `/api/cart/items/:itemId` | Xóa một mục khỏi giỏ hàng | JWT |
+| **DELETE** | `/api/cart/clear` | Xóa toàn bộ giỏ hàng | JWT |
+
+### 5.4.4 Orders
+| Method | Endpoint | Mô tả | Auth |
+|---|---|---|---|
+| **POST** | `/api/orders` | Tạo đơn hàng mới (gọi sp_CreateOrder) | JWT |
+| **GET** | `/api/orders` | Lấy danh sách đơn hàng của user | JWT |
+| **GET** | `/api/orders/:id` | Chi tiết một đơn hàng | JWT |
+| **GET** | `/api/admin/orders` | Lấy tất cả đơn hàng (admin) | Staff/Admin |
+| **PUT** | `/api/admin/orders/:id` | Cập nhật trạng thái đơn hàng | Staff/Admin |
+
+### 5.4.5 Payments & Coupons
+| Method | Endpoint | Mô tả | Auth |
+|---|---|---|---|
+| **POST** | `/api/payments/confirm` | Xác nhận thanh toán (gọi sp_ConfirmPayment) | JWT |
+| **GET** | `/api/payments/:orderId` | Xem lịch sử thanh toán của đơn | JWT |
+| **POST** | `/api/coupons/validate` | Kiểm tra mã giảm giá có hợp lệ không | JWT |
+| **GET** | `/api/admin/coupons` | Danh sách mã giảm giá | Admin |
+| **POST** | `/api/admin/coupons` | Tạo mã giảm giá mới | Admin |
+
+### 5.4.6 Admin - Báo cáo & Tồn kho
+| Method | Endpoint | Mô tả | Auth |
+|---|---|---|---|
+| **GET** | `/api/admin/reports/revenue` | Doanh thu theo ngày/tháng (từ View) | Admin |
+| **GET** | `/api/admin/reports/best-selling` | Sản phẩm bán chạy (từ View) | Admin |
+| **GET** | `/api/admin/reports/low-stock` | Sản phẩm sắp hết hàng (từ View) | Admin |
+| **GET** | `/api/admin/inventory` | Tổng quan tồn kho theo variant | Staff/Admin |
+| **PUT** | `/api/admin/inventory/:variantId` | Cập nhật tồn kho thủ công | Admin |
+| **GET** | `/api/warranties` | Danh sách bảo hành của user | JWT |
 
 ---
 
