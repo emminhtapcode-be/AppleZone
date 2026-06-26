@@ -1,93 +1,114 @@
-# 🍎 AppleZone Backend API
+# 🍎 AppleZone Backend API (Node.js & Express)
 
-Backend cho hệ thống bán lẻ AppleZone/TopZone Mini, xây dựng bằng **FastAPI + SQL Server**.
+Backend cho hệ thống bán lẻ AppleZone/TopZone Mini, được viết lại hoàn toàn bằng **Node.js + Express.js + SQL Server** (dùng Raw T-SQL thuần chay, không ORM).
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.11+ / FastAPI |
-| Database | Microsoft SQL Server |
-| ORM | SQLAlchemy 2.0 |
-| Auth | JWT (python-jose) |
-| Password | bcrypt (passlib) |
+|---|---|
+| Runtime | Node.js |
+| Web Framework | Express.js |
+| Database | Microsoft SQL Server (mssql driver) |
+| Query Engine | Raw SQL (parameterized queries) |
+| Auth | JWT (jsonwebtoken) |
+| Hashing | bcrypt |
+| API Testing | Swagger UI |
 
-## Cấu trúc thư mục
+---
+
+## Cấu trúc thư mục (MVC Pattern)
 
 ```
 applezone-backend/
-├── app/
-│   ├── api/routes/        # Endpoints: auth, products, cart, orders, payments, admin
-│   ├── core/              # Config, security (JWT, bcrypt)
-│   ├── db/                # Kết nối SQL Server (SQLAlchemy)
-│   ├── middleware/        # Auth middleware, role checker
-│   ├── models/            # SQLAlchemy ORM models
-│   ├── schemas/           # Pydantic request/response schemas
-│   ├── services/          # Business logic
-│   └── main.py            # Entry point, CORS, router mount
-├── tests/
-├── .env.example
-├── requirements.txt
+├── src/
+│   ├── config/
+│   │   └── db.js               # Kết nối SQL Server (Connection Pool)
+│   ├── middleware/
+│   │   ├── authMiddleware.js   # Xác thực JWT
+│   │   └── roleMiddleware.js   # Phân quyền (Customer/Staff/Admin)
+│   ├── controllers/            # Xử lý Logic (Raw SQL Queries)
+│   │   ├── authController.js
+│   │   ├── productController.js
+│   │   ├── cartController.js
+│   │   ├── orderController.js
+│   │   ├── paymentController.js
+│   │   └── adminController.js
+│   ├── routes/                 # Định tuyến API
+│   │   ├── auth.js / products.js / cart.js
+│   │   ├── orders.js / payments.js / admin.js
+│   └── app.js                  # Khởi tạo Express, Mount middlewares & routes
+├── server.js                   # Entry Point chạy server
+├── swagger.json                # Đặc tả OpenAPI / Swagger
+├── api_test.http               # File test API trực tiếp trên VS Code
+├── .env                        # Biến môi trường
+├── package.json
 └── README.md
 ```
 
-## API Endpoints
+---
 
-| Method | Endpoint | Mô tả | Auth |
-|--------|----------|-------|------|
-| POST | `/api/v1/auth/register` | Đăng ký | ❌ |
-| POST | `/api/v1/auth/login` | Đăng nhập → JWT | ❌ |
-| GET | `/api/v1/products/` | Danh sách sản phẩm | ❌ |
-| GET | `/api/v1/products/{id}` | Chi tiết sản phẩm | ❌ |
-| GET | `/api/v1/cart/` | Xem giỏ hàng | ✅ Customer |
-| POST | `/api/v1/cart/items` | Thêm vào giỏ | ✅ Customer |
-| POST | `/api/v1/orders/` | Tạo đơn hàng | ✅ Customer |
-| GET | `/api/v1/orders/` | Đơn hàng của tôi | ✅ Customer |
-| POST | `/api/v1/payments/{order_id}` | Thanh toán | ✅ Customer |
-| GET | `/api/v1/admin/orders` | Quản lý đơn | ✅ Admin/Staff |
+## API Endpoints & Phân quyền
 
-## Cài đặt & Chạy
+| Method | Endpoint | Mô tả | Auth | Quyền hạn |
+|---|---|---|---|---|
+| **POST** | `/api/v1/auth/register` | Đăng ký tài khoản | ❌ | Bất kỳ ai |
+| **POST** | `/api/v1/auth/login` | Đăng nhập lấy JWT | ❌ | Bất kỳ ai |
+| **GET** | `/api/v1/products` | Danh sách sản phẩm | ❌ | Bất kỳ ai |
+| **GET** | `/api/v1/products/:id` | Chi tiết sản phẩm + variants | ❌ | Bất kỳ ai |
+| **GET** | `/api/v1/cart` | Lấy giỏ hàng hiện tại | ✅ | Customer |
+| **POST** | `/api/v1/cart/items` | Thêm/cập nhật sản phẩm vào giỏ | ✅ | Customer |
+| **DELETE**| `/api/v1/cart/items/:id`| Xóa sản phẩm khỏi giỏ hàng | ✅ | Customer |
+| **POST** | `/api/v1/orders` | Tạo đơn hàng mới (Trừ kho, dùng mã giảm giá) | ✅ | Customer |
+| **GET** | `/api/v1/orders` | Danh sách đơn hàng cá nhân | ✅ | Customer |
+| **GET** | `/api/v1/orders/:id` | Chi tiết đơn hàng + sản phẩm | ✅ | Customer |
+| **POST** | `/api/v1/payments/:orderId`| Thực hiện thanh toán | ✅ | Customer |
+| **GET** | `/api/v1/admin/orders` | Xem toàn bộ đơn hàng | ✅ | Admin / Staff |
+| **PATCH** | `/api/v1/admin/orders/:id/status`| Cập nhật trạng thái đơn + ghi lịch sử | ✅ | Admin / Staff |
 
-### 1. Clone repo
+---
+
+## Cài đặt & Khởi chạy
+
+### 1. Cài đặt các Package
+Chạy lệnh sau tại root folder của backend để cài đặt các node modules:
 ```bash
-git clone https://github.com/your-username/applezone-backend.git
-cd applezone-backend
+npm install
 ```
 
-### 2. Tạo virtual environment
-```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
+### 2. Cấu hình Biến môi trường (`.env`)
+Tạo file `.env` (hoặc sửa file hiện có) với thông số kết nối SQL Server của bạn:
+```env
+PORT=8000
+DB_SERVER=127.0.0.1
+DB_PORT=1433
+DB_NAME=AppleZone
+DB_USER=sa
+DB_PASSWORD=Mật_khẩu_của_bạn
+
+SECRET_KEY=78bdea10e5fb6ee7546b765be9fc1990599f12ad0cc5310f5101ca18806434ad
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 ```
 
-### 3. Cài dependencies
-```bash
-pip install -r requirements.txt
-```
+### 3. Chạy ứng dụng
 
-### 4. Cấu hình .env
-```bash
-cp .env.example .env
-# Sửa thông tin DB và SECRET_KEY trong .env
-```
+- Chạy chế độ **Development** (tự động reload khi sửa file):
+  ```bash
+  npm run dev
+  ```
+- Chạy chế độ **Production**:
+  ```bash
+  npm start
+  ```
 
-### 5. Chạy ứng dụng
-```bash
-uvicorn app.main:app --reload --port 8000
-```
+---
 
-### 6. Truy cập Swagger Docs
-```
-http://localhost:8000/docs
-```
+## Cách Test API
 
-## Phân quyền
+### Cách 1: Sử dụng Giao diện Swagger UI (Khuyên dùng)
+Khi server đang chạy, truy cập trực tiếp:
+👉 **[http://localhost:8000/docs](http://localhost:8000/docs)**
 
-| Role | Quyền |
-|------|-------|
-| Customer | Xem sản phẩm, giỏ hàng, đặt hàng, thanh toán |
-| Staff | + Quản lý đơn hàng |
-| Admin | + Toàn quyền |
+### Cách 2: Sử dụng REST Client trong VS Code
+1. Cài đặt Extension **REST Client** trên VS Code.
+2. Mở file `api_test.http` tại root thư mục.
+3. Click vào chữ **`Send Request`** ngay phía trên các API để thực thi test trực tiếp.
