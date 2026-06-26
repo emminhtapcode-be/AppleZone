@@ -6,7 +6,7 @@ require('dotenv').config();
 const SECRET_KEY   = process.env.SECRET_KEY;
 const TOKEN_EXPIRE = parseInt(process.env.ACCESS_TOKEN_EXPIRE_MINUTES) || 60;
 
-// ─── POST /api/v1/auth/register ───────────────────────────────────────────────
+// ─── POST /api/auth/register ───────────────────────────────────────────────
 async function register(req, res) {
   try {
     const { full_name, email, phone, password } = req.body;
@@ -17,7 +17,7 @@ async function register(req, res) {
 
     // Kiểm tra email đã tồn tại
     const existing = await query(
-      'SELECT user_id FROM users WHERE email = @email',
+      'SELECT USER_ID AS user_id FROM Users WHERE email = @email',
       { email: { type: sql.NVarChar, value: email } }
     );
     if (existing.recordset.length > 0) {
@@ -27,9 +27,9 @@ async function register(req, res) {
     const password_hash = await bcrypt.hash(password, 12);
 
     const result = await query(
-      `INSERT INTO users (full_name, email, phone, password_hash, role)
-       OUTPUT INSERTED.user_id, INSERTED.full_name, INSERTED.email,
-              INSERTED.phone, INSERTED.role, INSERTED.avatar_url, INSERTED.created_at
+      `INSERT INTO Users (full_name, email, phone, password_hash, ROLE)
+       OUTPUT INSERTED.USER_ID AS user_id, INSERTED.full_name, INSERTED.email,
+              INSERTED.phone, INSERTED.ROLE AS role, INSERTED.avatar_url, INSERTED.created_at
        VALUES (@full_name, @email, @phone, @password_hash, 'Customer')`,
       {
         full_name:     { type: sql.NVarChar(100), value: full_name },
@@ -46,7 +46,7 @@ async function register(req, res) {
   }
 }
 
-// ─── POST /api/v1/auth/login ──────────────────────────────────────────────────
+// ─── POST /api/auth/login ──────────────────────────────────────────────────
 async function login(req, res) {
   try {
     const { email, password } = req.body;
@@ -56,8 +56,8 @@ async function login(req, res) {
     }
 
     const result = await query(
-      `SELECT user_id, full_name, email, phone, password_hash, role, avatar_url, created_at
-       FROM users WHERE email = @email`,
+      `SELECT USER_ID AS user_id, full_name, email, phone, password_hash, ROLE AS role, avatar_url, created_at
+       FROM Users WHERE email = @email`,
       { email: { type: sql.NVarChar, value: email } }
     );
 
@@ -85,4 +85,14 @@ async function login(req, res) {
   }
 }
 
-module.exports = { register, login };
+// ─── GET /api/auth/me ──────────────────────────────────────────────────────
+async function me(req, res) {
+  try {
+    return res.json(req.user);
+  } catch (err) {
+    console.error('[authController.me]', err);
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+module.exports = { register, login, me };

@@ -1,6 +1,6 @@
 const { query, sql } = require('../config/db');
 
-// ─── GET /api/v1/cart ─────────────────────────────────────────────────────────
+// ─── GET /api/cart ────────────────────────────────────────────────────────────
 async function getCart(req, res) {
   try {
     const user_id = req.user.user_id;
@@ -15,15 +15,15 @@ async function getCart(req, res) {
          CAST(v.price AS FLOAT)  AS price,
          v.stock_quantity,
          p.product_id, p.product_name, p.thumbnail_url
-       FROM carts c
-       LEFT JOIN cart_items       ci ON ci.cart_id    = c.cart_id
-       LEFT JOIN product_variants  v  ON v.variant_id  = ci.variant_id
-       LEFT JOIN products          p  ON p.product_id  = v.product_id
+       FROM Carts c
+       LEFT JOIN CartItems          ci ON ci.cart_id    = c.cart_id
+       LEFT JOIN ProductVariants    v  ON v.variant_id  = ci.variant_id
+       LEFT JOIN Products           p  ON p.product_id  = v.product_id
        WHERE c.user_id = @user_id`,
       { user_id: { type: sql.Int, value: user_id } }
     );
 
-    if (!result.recordset.length || result.recordset[0].cart_id === null) {
+    if (!result.recordset.length) {
       return res.json({ cart_id: null, items: [] });
     }
 
@@ -51,7 +51,7 @@ async function getCart(req, res) {
   }
 }
 
-// ─── POST /api/v1/cart/items ──────────────────────────────────────────────────
+// ─── POST /api/cart/add ───────────────────────────────────────────────────────
 async function addToCart(req, res) {
   try {
     const user_id            = req.user.user_id;
@@ -63,14 +63,14 @@ async function addToCart(req, res) {
 
     // Lấy hoặc tạo cart
     let cartResult = await query(
-      'SELECT cart_id FROM carts WHERE user_id = @user_id',
+      'SELECT cart_id FROM Carts WHERE user_id = @user_id',
       { user_id: { type: sql.Int, value: user_id } }
     );
 
     let cart_id;
     if (!cartResult.recordset.length) {
       const newCart = await query(
-        'INSERT INTO carts (user_id) OUTPUT INSERTED.cart_id VALUES (@user_id)',
+        'INSERT INTO Carts (user_id) OUTPUT INSERTED.cart_id VALUES (@user_id)',
         { user_id: { type: sql.Int, value: user_id } }
       );
       cart_id = newCart.recordset[0].cart_id;
@@ -78,9 +78,18 @@ async function addToCart(req, res) {
       cart_id = cartResult.recordset[0].cart_id;
     }
 
+    // Kiểm tra xem variant có tồn tại không
+    const variantRes = await query(
+      'SELECT variant_id, stock_quantity FROM ProductVariants WHERE variant_id = @variant_id AND status = 1',
+      { variant_id: { type: sql.Int, value: variant_id } }
+    );
+    if (!variantRes.recordset.length) {
+      return res.status(404).json({ detail: 'Product variant not found' });
+    }
+
     // Upsert item
     const existing = await query(
-      'SELECT cart_item_id, quantity FROM cart_items WHERE cart_id = @cart_id AND variant_id = @variant_id',
+      'SELECT cart_item_id, quantity FROM CartItems WHERE cart_id = @cart_id AND variant_id = @variant_id',
       {
         cart_id:    { type: sql.Int, value: cart_id },
         variant_id: { type: sql.Int, value: variant_id },
@@ -90,7 +99,7 @@ async function addToCart(req, res) {
     if (existing.recordset.length) {
       const newQty = existing.recordset[0].quantity + quantity;
       await query(
-        'UPDATE cart_items SET quantity = @qty WHERE cart_item_id = @id',
+        'UPDATE CartItems SET quantity = @qty WHERE cart_item_id = @id',
         {
           qty: { type: sql.Int, value: newQty },
           id:  { type: sql.Int, value: existing.recordset[0].cart_item_id },
@@ -98,7 +107,7 @@ async function addToCart(req, res) {
       );
     } else {
       await query(
-        'INSERT INTO cart_items (cart_id, variant_id, quantity) VALUES (@cart_id, @variant_id, @quantity)',
+        'INSERT INTO CartItems (cart_id, variant_id, quantity) VALUES (@cart_id, @variant_id, @quantity)',
         {
           cart_id:    { type: sql.Int, value: cart_id },
           variant_id: { type: sql.Int, value: variant_id },
@@ -107,32 +116,91 @@ async function addToCart(req, res) {
       );
     }
 
-    return res.json({ message: 'Added to cart' });
+    return res.json({ message: 'Added to cart successfully' });
   } catch (err) {
     console.error('[cartController.addToCart]', err);
     return res.status(500).json({ detail: 'Internal server error' });
   }
 }
 
-// ─── DELETE /api/v1/cart/items/:id ────────────────────────────────────────────
-async function removeCartItem(req, res) {
+// ─── PUT /api/cart/items/:itemId ──────────────────────────────────────────────
+async function updateCartItem(req, res) {
   try {
-    const item_id = parseInt(req.params.id);
+    const cart_item_id = parseInt(req.params.itemId);
+    const { quantity } = req.body;
+
+    if (quantity === undefined || quantity < 1) {
+      return res.status(400).json({ detail: 'quantity (>= 1) là bắt buộc' });
+    }
 
     const result = await query(
-      'DELETE FROM cart_items WHERE cart_item_id = @id',
-      { id: { type: sql.Int, value: item_id } }
+      'UPDATE CartItems SET quantity = @qty WHERE cart_item_id = @id',
+      {
+        qty: { type: sql.Int, value: quantity },
+        id:  { type: sql.Int, value: cart_item_id },
+      }
     );
 
     if (result.rowsAffected[0] === 0) {
-      return res.status(404).json({ detail: 'Item not found' });
+      return res.status(404).json({ detail: 'Item not found in cart' });
     }
 
-    return res.json({ message: 'Removed' });
+    return res.json({ message: 'Cart item updated successfully' });
+  } catch (err) {
+    console.error('[cartController.updateCartItem]', err);
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+// ─── DELETE /api/cart/items/:itemId ───────────────────────────────────────────
+async function removeCartItem(req, res) {
+  try {
+    const cart_item_id = parseInt(req.params.itemId);
+
+    const result = await query(
+      'DELETE FROM CartItems WHERE cart_item_id = @id',
+      { id: { type: sql.Int, value: cart_item_id } }
+    );
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ detail: 'Item not found in cart' });
+    }
+
+    return res.json({ message: 'Removed item from cart successfully' });
   } catch (err) {
     console.error('[cartController.removeCartItem]', err);
     return res.status(500).json({ detail: 'Internal server error' });
   }
 }
 
-module.exports = { getCart, addToCart, removeCartItem };
+// ─── DELETE /api/cart/clear ───────────────────────────────────────────────────
+async function clearCart(req, res) {
+  try {
+    const user_id = req.user.user_id;
+
+    // Lấy cart_id
+    const cartResult = await query(
+      'SELECT cart_id FROM Carts WHERE user_id = @user_id',
+      { user_id: { type: sql.Int, value: user_id } }
+    );
+
+    if (!cartResult.recordset.length) {
+      return res.json({ message: 'Cart already empty' });
+    }
+
+    const cart_id = cartResult.recordset[0].cart_id;
+
+    // Xóa toàn bộ CartItems thuộc cart_id này
+    await query(
+      'DELETE FROM CartItems WHERE cart_id = @cart_id',
+      { cart_id: { type: sql.Int, value: cart_id } }
+    );
+
+    return res.json({ message: 'Cleared cart successfully' });
+  } catch (err) {
+    console.error('[cartController.clearCart]', err);
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+module.exports = { getCart, addToCart, updateCartItem, removeCartItem, clearCart };

@@ -17,8 +17,8 @@ async function authenticate(req, res, next) {
     const payload = jwt.verify(token, process.env.SECRET_KEY);
 
     const result = await query(
-      `SELECT user_id, full_name, email, phone, role, avatar_url
-       FROM users WHERE user_id = @id`,
+      `SELECT USER_ID AS user_id, full_name, email, phone, ROLE AS role, avatar_url
+       FROM Users WHERE USER_ID = @id`,
       { id: { type: sql.Int, value: payload.sub } }
     );
 
@@ -28,7 +28,7 @@ async function authenticate(req, res, next) {
 
     req.user = result.recordset[0];
     next();
-  } catch {
+  } catch (err) {
     return res.status(401).json({ detail: 'Invalid or expired token' });
   }
 }

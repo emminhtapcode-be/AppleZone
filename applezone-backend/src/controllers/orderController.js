@@ -1,7 +1,7 @@
 const sql    = require('mssql');
 const { query, getPool } = require('../config/db');
 
-// ─── POST /api/v1/orders ──────────────────────────────────────────────────────
+// ─── POST /api/orders ─────────────────────────────────────────────────────────
 async function createOrder(req, res) {
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
@@ -16,7 +16,6 @@ async function createOrder(req, res) {
 
     await transaction.begin();
 
-    // Helper request trong transaction
     const txQuery = async (queryStr, params = {}) => {
       const r = transaction.request();
       for (const [key, { type, value }] of Object.entries(params)) {
@@ -31,7 +30,7 @@ async function createOrder(req, res) {
 
     for (const item of items) {
       const vRes = await txQuery(
-        'SELECT variant_id, CAST(price AS FLOAT) AS price, stock_quantity FROM product_variants WHERE variant_id = @id',
+        'SELECT variant_id, CAST(price AS FLOAT) AS price, stock_quantity FROM ProductVariants WHERE variant_id = @id',
         { id: { type: sql.Int, value: item.variant_id } }
       );
       if (!vRes.recordset.length) {
@@ -54,7 +53,7 @@ async function createOrder(req, res) {
     if (coupon_code) {
       const cpRes = await txQuery(
         `SELECT coupon_id, discount_type, CAST(discount_value AS FLOAT) AS discount_value
-         FROM coupons WHERE code = @code AND end_date > GETDATE()`,
+         FROM Coupons WHERE coupon_code = @code AND end_date > GETDATE() AND status = 1`,
         { code: { type: sql.NVarChar, value: coupon_code } }
       );
       if (cpRes.recordset.length) {
@@ -64,7 +63,7 @@ async function createOrder(req, res) {
           ? total * cp.discount_value / 100
           : cp.discount_value;
         await txQuery(
-          'UPDATE coupons SET used_count = used_count + 1 WHERE coupon_id = @id',
+          'UPDATE Coupons SET used_count = used_count + 1 WHERE coupon_id = @id',
           { id: { type: sql.Int, value: coupon_id } }
         );
       }
@@ -74,7 +73,7 @@ async function createOrder(req, res) {
 
     // ── 3. Tạo đơn hàng ──
     const orderRes = await txQuery(
-      `INSERT INTO orders
+      `INSERT INTO Orders
          (user_id, shipping_address_id, coupon_id, total_amount, discount_amount, final_amount, order_status, payment_status)
        OUTPUT INSERTED.order_id, CAST(INSERTED.total_amount AS FLOAT) AS total_amount,
               CAST(INSERTED.discount_amount AS FLOAT) AS discount_amount,
@@ -96,7 +95,7 @@ async function createOrder(req, res) {
     // ── 4. Insert order items + trừ stock ──
     for (const item of itemsData) {
       await txQuery(
-        `INSERT INTO order_items (order_id, variant_id, quantity, unit_price, discount_amount)
+        `INSERT INTO OrderItems (order_id, variant_id, quantity, unit_price, discount_amount)
          VALUES (@order_id, @variant_id, @qty, @price, 0)`,
         {
           order_id:   { type: sql.Int,          value: order_id },
@@ -106,7 +105,7 @@ async function createOrder(req, res) {
         }
       );
       await txQuery(
-        'UPDATE product_variants SET stock_quantity = stock_quantity - @qty WHERE variant_id = @id',
+        'UPDATE ProductVariants SET stock_quantity = stock_quantity - @qty WHERE variant_id = @id',
         {
           qty: { type: sql.Int, value: item.quantity },
           id:  { type: sql.Int, value: item.variant_id },
@@ -116,7 +115,7 @@ async function createOrder(req, res) {
 
     // ── 5. Ghi tracking ──
     await txQuery(
-      `INSERT INTO order_tracking (order_id, status, note) VALUES (@order_id, 'Pending', 'Order created')`,
+      `INSERT INTO OrderTracking (order_id, status, note) VALUES (@order_id, 'Pending', 'Order created')`,
       { order_id: { type: sql.Int, value: order_id } }
     );
 
@@ -129,7 +128,7 @@ async function createOrder(req, res) {
   }
 }
 
-// ─── GET /api/v1/orders ───────────────────────────────────────────────────────
+// ─── GET /api/orders ──────────────────────────────────────────────────────────
 async function getMyOrders(req, res) {
   try {
     const result = await query(
@@ -137,7 +136,7 @@ async function getMyOrders(req, res) {
               CAST(discount_amount AS FLOAT) AS discount_amount,
               CAST(final_amount AS FLOAT) AS final_amount,
               order_status, payment_status, created_at
-       FROM orders WHERE user_id = @user_id
+       FROM Orders WHERE user_id = @user_id
        ORDER BY created_at DESC`,
       { user_id: { type: sql.Int, value: req.user.user_id } }
     );
@@ -148,7 +147,7 @@ async function getMyOrders(req, res) {
   }
 }
 
-// ─── GET /api/v1/orders/:id ───────────────────────────────────────────────────
+// ─── GET /api/orders/:id ──────────────────────────────────────────────────────
 async function getOrder(req, res) {
   try {
     const order_id = parseInt(req.params.id);
@@ -166,13 +165,13 @@ async function getOrder(req, res) {
                   CAST(oi.unit_price AS FLOAT) AS unit_price,
                   v.color, v.storage, v.sku,
                   p.product_name, p.thumbnail_url
-           FROM order_items oi
-           LEFT JOIN product_variants v ON v.variant_id = oi.variant_id
-           LEFT JOIN products          p ON p.product_id  = v.product_id
+           FROM OrderItems oi
+           LEFT JOIN ProductVariants v ON v.variant_id = oi.variant_id
+           LEFT JOIN Products          p ON p.product_id  = v.product_id
            WHERE oi.order_id = o.order_id
            FOR JSON PATH
          ) AS items
-       FROM orders o
+       FROM Orders o
        WHERE o.order_id = @order_id AND o.user_id = @user_id`,
       {
         order_id: { type: sql.Int, value: order_id },
@@ -192,4 +191,69 @@ async function getOrder(req, res) {
   }
 }
 
-module.exports = { createOrder, getMyOrders, getOrder };
+// ─── GET /api/admin/orders ────────────────────────────────────────────────────
+async function getAllOrders(req, res) {
+  try {
+    const result = await query(
+      `SELECT
+         o.order_id, o.user_id,
+         u.full_name, u.email,
+         CAST(o.total_amount    AS FLOAT) AS total_amount,
+         CAST(o.discount_amount AS FLOAT) AS discount_amount,
+         CAST(o.final_amount    AS FLOAT) AS final_amount,
+         o.order_status, o.payment_status, o.created_at
+       FROM Orders o
+       LEFT JOIN Users u ON u.USER_ID = o.user_id
+       ORDER BY o.created_at DESC`
+    );
+    return res.json(result.recordset);
+  } catch (err) {
+    console.error('[orderController.getAllOrders]', err);
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+// ─── PUT /api/admin/orders/:id ────────────────────────────────────────────────
+async function updateOrderStatus(req, res) {
+  try {
+    const order_id = parseInt(req.params.id);
+    const { status } = req.body;
+
+    const validStatuses = ['Pending', 'Confirmed', 'Shipping', 'Delivered', 'Cancelled'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        detail: `Status không hợp lệ. Chọn một trong: ${validStatuses.join(', ')}`,
+      });
+    }
+
+    const result = await query(
+      `UPDATE Orders SET order_status = @status WHERE order_id = @order_id`,
+      {
+        status:   { type: sql.NVarChar(50), value: status },
+        order_id: { type: sql.Int,          value: order_id },
+      }
+    );
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ detail: 'Order not found' });
+    }
+
+    // Ghi tracking
+    await query(
+      `INSERT INTO OrderTracking (order_id, status, note)
+       VALUES (@order_id, @status, @note)`,
+      {
+        order_id: { type: sql.Int,          value: order_id },
+        status:   { type: sql.NVarChar(50), value: status },
+        note:     { type: sql.NVarChar(255), value: `Status updated to ${status} by admin` },
+      }
+    );
+
+    return res.json({ message: `Order status updated to ${status}` });
+  } catch (err) {
+    console.error('[orderController.updateOrderStatus]', err);
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+module.exports = { createOrder, getMyOrders, getOrder, getAllOrders, updateOrderStatus };
