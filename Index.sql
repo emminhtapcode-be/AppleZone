@@ -15,4 +15,15 @@ CREATE INDEX IX_Carts_UserId ON Carts(user_id);
 
 -- Index tìm đánh giá theo sản phẩm
 CREATE INDEX IX_Reviews_ProductId ON Reviews(product_id);
-GO
+
+-- Index tìm đơn hàng theo trạng thái
+CREATE INDEX IX_Orders_Status ON Orders(order_status);
+
+-- Index tìm variant theo SKU
+CREATE INDEX IX_Variants_SKU ON ProductVariants(sku);
+
+-- Index tìm payment theo order
+CREATE INDEX IX_Payments_OrderId ON Payments(order_id);
+
+-- Index tìm warranty theo order item
+CREATE INDEX IX_Warranties_OrderItemId ON Warranties(order_item_id);
