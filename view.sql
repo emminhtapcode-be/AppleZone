@@ -23,7 +23,7 @@ JOIN ProductVariants pv ON oi.variant_id = pv.variant_id
 JOIN Products p ON pv.product_id = p.product_id
 JOIN Orders o ON oi.order_id   = o.order_id
 WHERE o.order_status != 'cancelled'
-GROUP BY p.product_id, p.product_name
+GROUP BY p.product_id, p.product_name;
 -- SELECT TOP 10 * FROM vw_BanChay ORDER BY tong_ban DESC; khi nào muốn xem thì nhập
 GO
 
