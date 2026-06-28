@@ -17,9 +17,9 @@ async function getCategories(req, res) {
 async function getProducts(req, res) {
   try {
     const category_id = req.query.category_id ? parseInt(req.query.category_id) : null;
-    const search      = req.query.search || null;
-    const skip        = parseInt(req.query.skip)  || 0;
-    const limit       = Math.min(parseInt(req.query.limit) || 20, 100);
+    const search = req.query.search || null;
+    const skip = parseInt(req.query.skip) || 0;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
 
     let where = 'WHERE p.status = 1';
     const params = {};
@@ -33,7 +33,7 @@ async function getProducts(req, res) {
       params.search = { type: sql.NVarChar, value: `%${search}%` };
     }
 
-    params.skip  = { type: sql.Int, value: skip };
+    params.skip = { type: sql.Int, value: skip };
     params.limit = { type: sql.Int, value: limit };
 
     const result = await query(
@@ -82,9 +82,9 @@ async function getProduct(req, res) {
            SELECT v.variant_id, v.color, v.storage, v.sku,
                   CAST(v.price AS FLOAT) AS price, v.stock_quantity, v.status,
                   (
-                     SELECT i.image_id, i.image_url, i.is_thumbnail
+                     SELECT i.image_id, i.image_url, i.is_primary -- 1. ĐỔI THÀNH is_primary
                      FROM ProductImages i
-                     WHERE i.product_id = p.product_id
+                     WHERE i.variant_id = v.variant_id        -- 2. SỬA THÀNH KẾT NỐI QUA variant_id
                      FOR JSON PATH
                   ) AS images
            FROM ProductVariants v
@@ -117,7 +117,6 @@ async function getProduct(req, res) {
     return res.status(500).json({ detail: 'Internal server error' });
   }
 }
-
 // ─── GET /api/products/:id/variants ───────────────────────────────────────────
 async function getProductVariants(req, res) {
   try {
@@ -183,11 +182,11 @@ async function createProduct(req, res) {
               INSERTED.description, CAST(INSERTED.base_price AS FLOAT) AS base_price, INSERTED.status
        VALUES (@category_id, @product_name, @thumbnail_url, @description, @base_price, 1)`,
       {
-        category_id:   { type: sql.Int, value: category_id },
-        product_name:  { type: sql.NVarChar(100), value: product_name },
+        category_id: { type: sql.Int, value: category_id },
+        product_name: { type: sql.NVarChar(100), value: product_name },
         thumbnail_url: { type: sql.VarChar(255), value: thumbnail_url || null },
-        description:   { type: sql.NVarChar(sql.MAX), value: description || null },
-        base_price:    { type: sql.Decimal(18, 2), value: base_price || 0 },
+        description: { type: sql.NVarChar(sql.MAX), value: description || null },
+        base_price: { type: sql.Decimal(18, 2), value: base_price || 0 },
       }
     );
 
@@ -219,13 +218,13 @@ async function updateProduct(req, res) {
            status = COALESCE(@status, status)
        WHERE product_id = @product_id`,
       {
-        product_id:    { type: sql.Int, value: product_id },
-        category_id:   { type: sql.Int, value: category_id !== undefined ? category_id : null },
-        product_name:  { type: sql.NVarChar(100), value: product_name !== undefined ? product_name : null },
+        product_id: { type: sql.Int, value: product_id },
+        category_id: { type: sql.Int, value: category_id !== undefined ? category_id : null },
+        product_name: { type: sql.NVarChar(100), value: product_name !== undefined ? product_name : null },
         thumbnail_url: { type: sql.VarChar(255), value: thumbnail_url !== undefined ? thumbnail_url : null },
-        description:   { type: sql.NVarChar(sql.MAX), value: description !== undefined ? description : null },
-        base_price:    { type: sql.Decimal(18, 2), value: base_price !== undefined ? base_price : null },
-        status:        { type: sql.Bit, value: status !== undefined ? status : null },
+        description: { type: sql.NVarChar(sql.MAX), value: description !== undefined ? description : null },
+        base_price: { type: sql.Decimal(18, 2), value: base_price !== undefined ? base_price : null },
+        status: { type: sql.Bit, value: status !== undefined ? status : null },
       }
     );
 
