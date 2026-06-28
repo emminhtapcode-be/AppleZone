@@ -144,11 +144,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES=60
 
 ## Cách Test API
 
-### Cách 1: Sử dụng Giao diện Swagger UI (Khuyên dùng)
+###  Sử dụng Giao diện Swagger UI (Khuyên dùng)
 Khi server đang chạy, truy cập trực tiếp:
 👉 **[http://localhost:8000/docs](http://localhost:8000/docs)**
-
-### Cách 2: Sử dụng REST Client trong VS Code
-1. Cài đặt Extension **REST Client** trên VS Code.
-2. Mở file `api_test.http` tại root thư mục.
-3. Click vào chữ **`Send Request`** ngay phía trên các API để thực thi test trực tiếp.
