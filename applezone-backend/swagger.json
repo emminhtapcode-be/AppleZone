@@ -406,6 +406,79 @@
         }
       }
     },
+    "/admin/products": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Tạo sản phẩm mới (Admin)",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["category_id", "product_name"],
+                "properties": {
+                  "category_id": { "type": "integer" },
+                  "product_name": { "type": "string" },
+                  "thumbnail_url": { "type": "string" },
+                  "description": { "type": "string" },
+                  "base_price": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Tạo thành công" },
+          "400": { "description": "Dữ liệu không hợp lệ" }
+        }
+      }
+    },
+    "/admin/products/{id}": {
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Cập nhật sản phẩm (Admin)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category_id": { "type": "integer" },
+                  "product_name": { "type": "string" },
+                  "thumbnail_url": { "type": "string" },
+                  "description": { "type": "string" },
+                  "base_price": { "type": "number" },
+                  "status": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công" },
+          "404": { "description": "Không tìm thấy sản phẩm" }
+        }
+      },
+      "delete": {
+        "tags": ["Admin"],
+        "summary": "Xóa sản phẩm (Admin, soft delete)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Xóa thành công" },
+          "404": { "description": "Không tìm thấy sản phẩm" }
+        }
+      }
+    },
     "/admin/orders": {
       "get": {
         "tags": ["Admin"],
