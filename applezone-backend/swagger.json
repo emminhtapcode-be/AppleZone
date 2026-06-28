@@ -135,6 +135,31 @@
         }
       }
     },
+    "/cart/add": {
+      "post": {
+        "tags": ["Cart"],
+        "summary": "Thêm sản phẩm vào giỏ hàng",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["variant_id", "quantity"],
+                "properties": {
+                  "variant_id": { "type": "integer" },
+                  "quantity": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Thêm thành công" }
+        }
+      }
+    },
     "/cart/items": {
       "post": {
         "tags": ["Cart"],
@@ -161,6 +186,32 @@
       }
     },
     "/cart/items/{id}": {
+      "put": {
+        "tags": ["Cart"],
+        "summary": "Cập nhật số lượng sản phẩm trong giỏ hàng",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["quantity"],
+                "properties": {
+                  "quantity": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công" },
+          "404": { "description": "Không tìm thấy item" }
+        }
+      },
       "delete": {
         "tags": ["Cart"],
         "summary": "Xóa sản phẩm khỏi giỏ hàng",
@@ -171,6 +222,16 @@
         "responses": {
           "200": { "description": "Xóa thành công" },
           "404": { "description": "Không tìm thấy item" }
+        }
+      }
+    },
+    "/cart/clear": {
+      "delete": {
+        "tags": ["Cart"],
+        "summary": "Xóa toàn bộ giỏ hàng",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Xóa thành công" }
         }
       }
     },
