@@ -101,6 +101,30 @@
         }
       }
     },
+    "/products/{id}/variants": {
+      "get": {
+        "tags": ["Products"],
+        "summary": "Lấy biến thể của sản phẩm",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Thành công" }
+        }
+      }
+    },
+    "/products/category/{catId}": {
+      "get": {
+        "tags": ["Products"],
+        "summary": "Sản phẩm theo danh mục",
+        "parameters": [
+          { "name": "catId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Thành công" }
+        }
+      }
+    },
     "/cart": {
       "get": {
         "tags": ["Cart"],
