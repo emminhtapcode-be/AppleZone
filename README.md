@@ -1,9 +1,7 @@
 # 🍎 AppleZone Backend API (Node.js & Express)
 
-Backend cho hệ thống bán lẻ AppleZone/TopZone Mini, được viết lại hoàn toàn bằng **Node.js + Express.js + SQL Server** (dùng Raw T-SQL thuần chay, không ORM).
-
+Backend cho hệ thống bán lẻ AppleZone/TopZone Mini, được viết hoàn toàn bằng **Node.js + Express.js + SQL Server** 
 ## Tech Stack
-
 | Layer | Technology |
 |---|---|
 | Runtime | Node.js |
