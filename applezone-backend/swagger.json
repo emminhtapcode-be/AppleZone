@@ -73,6 +73,91 @@
         }
       }
     },
+    "/categories": {
+      "get": {
+        "tags": ["Categories"],
+        "summary": "Lấy danh sách danh mục",
+        "responses": {
+          "200": { "description": "Thành công" }
+        }
+      },
+      "post": {
+        "tags": ["Categories"],
+        "summary": "Tạo danh mục mới (Admin)",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["category_name", "slug"],
+                "properties": {
+                  "category_name": { "type": "string" },
+                  "slug": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Tạo thành công" },
+          "400": { "description": "Dữ liệu không hợp lệ hoặc slug đã tồn tại" }
+        }
+      }
+    },
+    "/categories/{id}": {
+      "get": {
+        "tags": ["Categories"],
+        "summary": "Chi tiết danh mục",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Thành công" },
+          "404": { "description": "Không tìm thấy danh mục" }
+        }
+      },
+      "put": {
+        "tags": ["Categories"],
+        "summary": "Cập nhật danh mục (Admin)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category_name": { "type": "string" },
+                  "slug": { "type": "string" },
+                  "status": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cập nhật thành công" },
+          "404": { "description": "Không tìm thấy danh mục" }
+        }
+      },
+      "delete": {
+        "tags": ["Categories"],
+        "summary": "Xóa danh mục (Admin, soft delete)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Xóa thành công" },
+          "404": { "description": "Không tìm thấy danh mục" }
+        }
+      }
+    },
     "/products": {
       "get": {
         "tags": ["Products"],

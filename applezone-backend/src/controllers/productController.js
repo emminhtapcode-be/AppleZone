@@ -1,18 +1,5 @@
 const { query, sql } = require('../config/db');
 
-// ─── GET /api/categories ─────────────────────────────────────────────────────
-async function getCategories(req, res) {
-  try {
-    const result = await query(
-      `SELECT category_id, category_name, slug, status FROM Categories WHERE status = 1`
-    );
-    return res.json(result.recordset);
-  } catch (err) {
-    console.error('[productController.getCategories]', err);
-    return res.status(500).json({ detail: 'Internal server error' });
-  }
-}
-
 // ─── GET /api/products ────────────────────────────────────────────────────────
 async function getProducts(req, res) {
   try {
@@ -256,7 +243,6 @@ async function deleteProduct(req, res) {
 }
 
 module.exports = {
-  getCategories,
   getProducts,
   getProduct,
   getProductVariants,

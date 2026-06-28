@@ -4,8 +4,9 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('../swagger.json');
 require('dotenv').config();
 
-const authRoutes     = require('./routes/auth');
-const productRoutes  = require('./routes/products');
+const authRoutes       = require('./routes/auth');
+const categoryRoutes   = require('./routes/categories');
+const productRoutes    = require('./routes/products');
 const cartRoutes     = require('./routes/cart');
 const orderRoutes    = require('./routes/orders');
 const paymentRoutes  = require('./routes/payments');
@@ -34,8 +35,9 @@ app.get('/', (req, res) => {
 });
 
 // ── Routes ───────────────────────────────────────────────────────────────────
-app.use('/api/v1/auth',     authRoutes);
-app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/auth',       authRoutes);
+app.use('/api/v1/categories', categoryRoutes);
+app.use('/api/v1/products',   productRoutes);
 app.use('/api/v1/cart',     cartRoutes);
 app.use('/api/v1/orders',   orderRoutes);
 app.use('/api/v1/payments', paymentRoutes);
