@@ -489,6 +489,37 @@
         }
       }
     },
+    "/admin/orders/{id}": {
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Cập nhật trạng thái đơn hàng (Admin/Staff)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["Pending", "Confirmed", "Shipping", "Delivered", "Cancelled"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Thành công" },
+          "404": { "description": "Không tìm thấy đơn hàng" }
+        }
+      }
+    },
     "/admin/orders/{id}/status": {
       "patch": {
         "tags": ["Admin"],
