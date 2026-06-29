@@ -1,5 +1,7 @@
-const sql    = require('mssql');
+const sql = require('mssql');
 const { query, getPool } = require('../config/db');
+
+const ORDER_STATUSES = ['Pending', 'Confirmed', 'Shipping', 'Delivered', 'Cancelled'];
 
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
 async function createOrder(req, res) {
@@ -7,11 +9,18 @@ async function createOrder(req, res) {
   const transaction = new sql.Transaction(pool);
 
   try {
-    const { shipping_address_id, coupon_code, items } = req.body;
+    const shipping_address_id = req.body.shipping_address_id ?? req.body.address_id;
+    const { coupon_code, items } = req.body;
     const user_id = req.user.user_id;
 
     if (!shipping_address_id || !Array.isArray(items) || !items.length) {
       return res.status(400).json({ detail: 'shipping_address_id và items là bắt buộc' });
+    }
+
+    for (const item of items) {
+      if (!item.variant_id || !item.quantity || item.quantity < 1) {
+        return res.status(400).json({ detail: 'Mỗi item cần variant_id và quantity >= 1' });
+      }
     }
 
     await transaction.begin();
@@ -24,13 +33,27 @@ async function createOrder(req, res) {
       return r.query(queryStr);
     };
 
-    // ── 1. Validate variants + tính tổng ──
+    const addrRes = await txQuery(
+      `SELECT address_id FROM UserAddresses
+       WHERE address_id = @addr_id AND user_id = @user_id`,
+      {
+        addr_id: { type: sql.Int, value: shipping_address_id },
+        user_id: { type: sql.Int, value: user_id },
+      }
+    );
+    if (!addrRes.recordset.length) {
+      await transaction.rollback();
+      return res.status(400).json({ detail: 'Địa chỉ giao hàng không hợp lệ' });
+    }
+
     let total = 0;
     const itemsData = [];
 
     for (const item of items) {
       const vRes = await txQuery(
-        'SELECT variant_id, CAST(price AS FLOAT) AS price, stock_quantity FROM ProductVariants WHERE variant_id = @id',
+        `SELECT variant_id, CAST(price AS FLOAT) AS price, stock_quantity
+         FROM ProductVariants WITH (UPDLOCK, ROWLOCK)
+         WHERE variant_id = @id AND status = 1`,
         { id: { type: sql.Int, value: item.variant_id } }
       );
       if (!vRes.recordset.length) {
@@ -46,32 +69,50 @@ async function createOrder(req, res) {
       itemsData.push({ variant_id: v.variant_id, quantity: item.quantity, unit_price: v.price });
     }
 
-    // ── 2. Xử lý coupon ──
-    let discount  = 0;
+    let discount = 0;
     let coupon_id = null;
 
     if (coupon_code) {
       const cpRes = await txQuery(
-        `SELECT coupon_id, discount_type, CAST(discount_value AS FLOAT) AS discount_value
-         FROM Coupons WHERE coupon_code = @code AND end_date > GETDATE() AND status = 1`,
+        `SELECT coupon_id, discount_type, CAST(discount_value AS FLOAT) AS discount_value,
+                CAST(min_order_value AS FLOAT) AS min_order_value,
+                CAST(max_discount AS FLOAT) AS max_discount,
+                usage_limit, used_count
+         FROM Coupons
+         WHERE coupon_code = @code AND status = 1
+           AND start_date <= GETDATE() AND end_date > GETDATE()`,
         { code: { type: sql.NVarChar, value: coupon_code } }
       );
-      if (cpRes.recordset.length) {
-        const cp = cpRes.recordset[0];
-        coupon_id = cp.coupon_id;
-        discount  = cp.discount_type === 'Percentage'
-          ? total * cp.discount_value / 100
-          : cp.discount_value;
-        await txQuery(
-          'UPDATE Coupons SET used_count = used_count + 1 WHERE coupon_id = @id',
-          { id: { type: sql.Int, value: coupon_id } }
-        );
+      if (!cpRes.recordset.length) {
+        await transaction.rollback();
+        return res.status(400).json({ detail: 'Mã giảm giá không hợp lệ hoặc đã hết hạn' });
       }
+      const cp = cpRes.recordset[0];
+      if (cp.usage_limit !== null && cp.used_count >= cp.usage_limit) {
+        await transaction.rollback();
+        return res.status(400).json({ detail: 'Mã giảm giá đã đạt giới hạn sử dụng' });
+      }
+      if (cp.min_order_value && total < cp.min_order_value) {
+        await transaction.rollback();
+        return res.status(400).json({ detail: `Đơn hàng tối thiểu ${cp.min_order_value} để dùng mã này` });
+      }
+
+      coupon_id = cp.coupon_id;
+      discount = cp.discount_type === 'Percentage' || cp.discount_type === 'percent'
+        ? total * cp.discount_value / 100
+        : cp.discount_value;
+      if (cp.max_discount && discount > cp.max_discount) {
+        discount = cp.max_discount;
+      }
+
+      await txQuery(
+        'UPDATE Coupons SET used_count = used_count + 1 WHERE coupon_id = @id',
+        { id: { type: sql.Int, value: coupon_id } }
+      );
     }
 
-    const final_amount = total - discount;
+    const final_amount = Math.max(total - discount, 0);
 
-    // ── 3. Tạo đơn hàng ──
     const orderRes = await txQuery(
       `INSERT INTO Orders
          (user_id, shipping_address_id, coupon_id, total_amount, discount_amount, final_amount, order_status, payment_status)
@@ -81,27 +122,26 @@ async function createOrder(req, res) {
               INSERTED.order_status, INSERTED.payment_status, INSERTED.created_at
        VALUES (@user_id, @addr_id, @coupon_id, @total, @discount, @final, 'Pending', 'Unpaid')`,
       {
-        user_id:   { type: sql.Int,          value: user_id },
-        addr_id:   { type: sql.Int,          value: shipping_address_id },
-        coupon_id: { type: sql.Int,          value: coupon_id },
-        total:     { type: sql.Decimal(18,2), value: total },
-        discount:  { type: sql.Decimal(18,2), value: discount },
-        final:     { type: sql.Decimal(18,2), value: final_amount },
+        user_id:   { type: sql.Int, value: user_id },
+        addr_id:   { type: sql.Int, value: shipping_address_id },
+        coupon_id: { type: sql.Int, value: coupon_id },
+        total:     { type: sql.Decimal(18, 2), value: total },
+        discount:  { type: sql.Decimal(18, 2), value: discount },
+        final:     { type: sql.Decimal(18, 2), value: final_amount },
       }
     );
-    const order    = orderRes.recordset[0];
+    const order = orderRes.recordset[0];
     const order_id = order.order_id;
 
-    // ── 4. Insert order items + trừ stock ──
     for (const item of itemsData) {
       await txQuery(
-        `INSERT INTO OrderItems (order_id, variant_id, quantity, unit_price, discount_amount)
-         VALUES (@order_id, @variant_id, @qty, @price, 0)`,
+        `INSERT INTO OrderItems (order_id, variant_id, quantity, unit_price)
+         VALUES (@order_id, @variant_id, @qty, @price)`,
         {
-          order_id:   { type: sql.Int,          value: order_id },
-          variant_id: { type: sql.Int,          value: item.variant_id },
-          qty:        { type: sql.Int,          value: item.quantity },
-          price:      { type: sql.Decimal(18,2), value: item.unit_price },
+          order_id:   { type: sql.Int, value: order_id },
+          variant_id: { type: sql.Int, value: item.variant_id },
+          qty:        { type: sql.Int, value: item.quantity },
+          price:      { type: sql.Decimal(18, 2), value: item.unit_price },
         }
       );
       await txQuery(
@@ -113,7 +153,6 @@ async function createOrder(req, res) {
       );
     }
 
-    // ── 5. Ghi tracking ──
     await txQuery(
       `INSERT INTO OrderTracking (order_id, status, note) VALUES (@order_id, 'Pending', 'Order created')`,
       { order_id: { type: sql.Int, value: order_id } }
@@ -151,7 +190,7 @@ async function getMyOrders(req, res) {
 async function getOrder(req, res) {
   try {
     const order_id = parseInt(req.params.id);
-    const user_id  = req.user.user_id;
+    const user_id = req.user.user_id;
 
     const result = await query(
       `SELECT
@@ -219,10 +258,9 @@ async function updateOrderStatus(req, res) {
     const order_id = parseInt(req.params.id);
     const { status } = req.body;
 
-    const validStatuses = ['Pending', 'Confirmed', 'Shipping', 'Delivered', 'Cancelled'];
-    if (!status || !validStatuses.includes(status)) {
+    if (!status || !ORDER_STATUSES.includes(status)) {
       return res.status(400).json({
-        detail: `Status không hợp lệ. Chọn một trong: ${validStatuses.join(', ')}`,
+        detail: `Status không hợp lệ. Chọn một trong: ${ORDER_STATUSES.join(', ')}`,
       });
     }
 
@@ -230,7 +268,7 @@ async function updateOrderStatus(req, res) {
       `UPDATE Orders SET order_status = @status WHERE order_id = @order_id`,
       {
         status:   { type: sql.NVarChar(50), value: status },
-        order_id: { type: sql.Int,          value: order_id },
+        order_id: { type: sql.Int, value: order_id },
       }
     );
 
@@ -238,14 +276,13 @@ async function updateOrderStatus(req, res) {
       return res.status(404).json({ detail: 'Order not found' });
     }
 
-    // Ghi tracking
     await query(
       `INSERT INTO OrderTracking (order_id, status, note)
        VALUES (@order_id, @status, @note)`,
       {
-        order_id: { type: sql.Int,          value: order_id },
+        order_id: { type: sql.Int, value: order_id },
         status:   { type: sql.NVarChar(50), value: status },
-        note:     { type: sql.NVarChar(255), value: `Status updated to ${status} by admin` },
+        note:     { type: sql.NVarChar(255), value: `Status updated to ${status}` },
       }
     );
 
@@ -256,4 +293,10 @@ async function updateOrderStatus(req, res) {
   }
 }
 
-module.exports = { createOrder, getMyOrders, getOrder, getAllOrders, updateOrderStatus };
+module.exports = {
+  createOrder,
+  getMyOrders,
+  getOrder,
+  getAllOrders,
+  updateOrderStatus,
+};
