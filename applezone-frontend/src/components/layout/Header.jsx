@@ -1,9 +1,12 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/useAuthStore';
+import useCartStore from '../../store/useCartStore';
+import './Header.css';
 
 const Header = () => {
   const { token, user, logout } = useAuthStore();
+  const { cartItems = [] } = useCartStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -11,39 +14,48 @@ const Header = () => {
     navigate('/');
   };
 
+  const totalCartItems = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+
   return (
-    <header style={{ padding: '1rem', background: '#222', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div className="logo">
-        <Link to="/" style={{ color: '#fff', textDecoration: 'none', fontSize: '1.5rem', fontWeight: 'bold' }}>
-          AppleZone
-        </Link>
-      </div>
-      <nav>
-        <ul style={{ listStyle: 'none', display: 'flex', gap: '1rem', margin: 0, padding: 0, alignItems: 'center' }}>
-          <li><Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Trang chủ</Link></li>
-          <li><Link to="/products" style={{ color: '#fff', textDecoration: 'none' }}>Sản phẩm</Link></li>
-          <li><Link to="/cart" style={{ color: '#fff', textDecoration: 'none' }}>Giỏ hàng</Link></li>
-          
+    <header className="header">
+      <div className="container header-container">
+        <div className="logo">
+          <Link to="/" className="logo-link">
+            <span className="logo-text">Top<span className="logo-zone">Zone</span></span>
+          </Link>
+        </div>
+
+        <nav>
+          <ul className="nav-links">
+            <li><Link to="/products?category=iphone" className="nav-item">iPhone</Link></li>
+            <li><Link to="/products?category=mac" className="nav-item">Mac</Link></li>
+            <li><Link to="/products?category=ipad" className="nav-item">iPad</Link></li>
+            <li><Link to="/products?category=watch" className="nav-item">Watch</Link></li>
+            <li><Link to="/products?category=sound" className="nav-item">Âm thanh</Link></li>
+            <li><Link to="/products?category=accessories" className="nav-item">Phụ kiện</Link></li>
+          </ul>
+        </nav>
+
+        <div className="header-actions">
           {token ? (
             <>
-              <li style={{ color: '#aaa' }}>Xin chào, {user?.username || 'Bạn'}</li>
-              <li>
-                <button 
-                  onClick={handleLogout} 
-                  style={{ background: 'transparent', color: '#fff', border: '1px solid #fff', padding: '5px 10px', cursor: 'pointer', borderRadius: '3px' }}
-                >
-                  Đăng xuất
-                </button>
-              </li>
+              <span className="user-greeting">Hi, {user?.full_name || user?.username || 'Bạn'}</span>
+              <button onClick={handleLogout} className="icon-btn" title="Đăng xuất">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              </button>
             </>
           ) : (
-            <>
-              <li><Link to="/login" style={{ color: '#fff', textDecoration: 'none' }}>Đăng nhập</Link></li>
-              <li><Link to="/register" style={{ color: '#fff', textDecoration: 'none', border: '1px solid #fff', padding: '5px 10px', borderRadius: '3px' }}>Đăng ký</Link></li>
-            </>
+            <Link to="/login" className="icon-btn" title="Đăng nhập">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            </Link>
           )}
-        </ul>
-      </nav>
+          
+          <Link to="/cart" className="icon-btn" title="Giỏ hàng">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+            {totalCartItems > 0 && <span className="cart-badge">{totalCartItems}</span>}
+          </Link>
+        </div>
+      </div>
     </header>
   );
 };

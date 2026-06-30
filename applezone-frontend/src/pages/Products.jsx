@@ -1,32 +1,44 @@
 import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import ProductCard from '../components/ProductCard';
 import useProductStore from '../store/useProductStore';
+import './Products.css';
 
 const Products = () => {
   const { products, isLoading, error, fetchProducts } = useProductStore();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const category = queryParams.get('category');
 
   useEffect(() => {
+    // In a real app, you'd pass category to fetchProducts
     fetchProducts();
-  }, [fetchProducts]);
+  }, [fetchProducts, category]);
 
-  if (isLoading) return <p>Đang tải sản phẩm...</p>;
-  if (error) return <p style={{ color: 'red' }}>Lỗi: {error}</p>;
+  if (isLoading) return <p style={{ textAlign: 'center', color: '#999', marginTop: '40px' }}>Đang tải sản phẩm...</p>;
+  if (error) return <p style={{ color: 'red', textAlign: 'center', marginTop: '40px' }}>Lỗi: {error}</p>;
+
+  // Ensure products is an array
+  const productList = Array.isArray(products) ? products : (products?.data || []);
+
+  const categoryName = category ? category.toUpperCase() : "TẤT CẢ SẢN PHẨM";
 
   return (
-    <div>
-      <h2>Danh sách sản phẩm</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px', marginTop: '20px' }}>
-        {products.map((product) => (
-          <div key={product.id || product._id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
-            {product.image && <img src={product.image} alt={product.name} style={{ width: '100%', height: '150px', objectFit: 'cover' }} />}
-            <h3>{product.name}</h3>
-            <p style={{ color: 'green', fontWeight: 'bold' }}>{product.price}đ</p>
-            <Link to={`/products/${product.id || product._id}`} style={{ display: 'inline-block', marginTop: '10px', padding: '8px 12px', background: '#007bff', color: '#fff', textDecoration: 'none', borderRadius: '3px' }}>
-              Xem chi tiết
-            </Link>
-          </div>
+    <div className="products-page container">
+      <h2 className="category-header">{categoryName}</h2>
+      
+      <div className="filters-bar">
+        <button className="filter-btn active">Mới nhất</button>
+        <button className="filter-btn">Bán chạy</button>
+        <button className="filter-btn">Giá thấp đến cao</button>
+        <button className="filter-btn">Giá cao đến thấp</button>
+      </div>
+
+      <div className="products-grid-full">
+        {productList.map((product) => (
+          <ProductCard key={product.product_id} product={product} />
         ))}
-        {products.length === 0 && <p>Chưa có sản phẩm nào.</p>}
+        {productList.length === 0 && <p style={{color: '#999', gridColumn: '1 / -1', textAlign: 'center'}}>Không tìm thấy sản phẩm nào.</p>}
       </div>
     </div>
   );

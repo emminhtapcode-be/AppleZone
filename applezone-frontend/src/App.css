@@ -1,3 +1,20 @@
+/* Global CSS Variables for TopZone Theme */
+:root {
+  --bg-dark: #000000;
+  --bg-darker: #111111;
+  --bg-card: #1a1a1a;
+  --bg-card-hover: #2a2a2a;
+  
+  --text-main: #ffffff;
+  --text-muted: #999999;
+  
+  --accent-blue: #2f80ed;
+  --accent-orange: #f5a623;
+  --border-color: #333333;
+  
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -5,8 +22,32 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #f9f9f9;
-  color: #333;
+  font-family: var(--font-main);
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul {
+  list-style: none;
+}
+
+button {
+  font-family: var(--font-main);
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* Container for constrained width */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 15px;
 }
