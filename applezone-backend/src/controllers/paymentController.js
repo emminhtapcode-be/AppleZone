@@ -35,6 +35,16 @@ async function confirmPayment(req, res) {
       }
     );
 
+    // Tự động tạo Bảo hành (Warranties) khi đơn hàng thanh toán xong
+    await query(
+      `INSERT INTO Warranties (order_item_id, serial_number, start_date, end_date, status)
+       SELECT oi.order_item_id, UPPER(NEWID()), CAST(GETDATE() AS DATE), CAST(DATEADD(YEAR, 1, GETDATE()) AS DATE), 'Active'
+       FROM OrderItems oi
+       WHERE oi.order_id = @order_id
+         AND NOT EXISTS (SELECT 1 FROM Warranties w WHERE w.order_item_id = oi.order_item_id)`,
+      { order_id: { type: sql.Int, value: order_id } }
+    );
+
     return res.json({ message: 'Payment confirmed successfully via sp_ConfirmPayment' });
   } catch (err) {
     console.error('[paymentController.confirmPayment]', err);

@@ -252,6 +252,73 @@ async function getAllOrders(req, res) {
   }
 }
 
+// ─── PUT /api/orders/:id/cancel ───────────────────────────────────────────────
+async function cancelOrder(req, res) {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  
+  try {
+    const order_id = parseInt(req.params.id);
+    const user_id = req.user.user_id;
+
+    await transaction.begin();
+
+    const txQuery = async (queryStr, params = {}) => {
+      const r = transaction.request();
+      for (const [key, { type, value }] of Object.entries(params)) {
+        r.input(key, type, value);
+      }
+      return r.query(queryStr);
+    };
+
+    // Kiểm tra đơn hàng của user và trạng thái Pending
+    const orderRes = await txQuery(
+      `SELECT order_status FROM Orders WHERE order_id = @order_id AND user_id = @user_id`,
+      {
+        order_id: { type: sql.Int, value: order_id },
+        user_id:  { type: sql.Int, value: user_id },
+      }
+    );
+
+    if (!orderRes.recordset.length) {
+      await transaction.rollback();
+      return res.status(404).json({ detail: 'Order not found or unauthorized' });
+    }
+
+    const order = orderRes.recordset[0];
+    if (order.order_status !== 'Pending') {
+      await transaction.rollback();
+      return res.status(400).json({ detail: 'Chỉ có thể hủy đơn ở trạng thái Pending' });
+    }
+
+    // Hoàn lại kho (cộng số lượng quantity vào stock_quantity)
+    await txQuery(`
+      UPDATE pv
+      SET pv.stock_quantity = pv.stock_quantity + oi.quantity
+      FROM ProductVariants pv
+      JOIN OrderItems oi ON pv.variant_id = oi.variant_id
+      WHERE oi.order_id = @order_id
+    `, { order_id: { type: sql.Int, value: order_id } });
+
+    // Cập nhật trạng thái đơn hàng thành Cancelled
+    await txQuery(`
+      UPDATE Orders SET order_status = 'Cancelled' WHERE order_id = @order_id
+    `, { order_id: { type: sql.Int, value: order_id } });
+
+    await txQuery(
+      `INSERT INTO OrderTracking (order_id, status, note) VALUES (@order_id, 'Cancelled', 'Customer cancelled the order')`,
+      { order_id: { type: sql.Int, value: order_id } }
+    );
+
+    await transaction.commit();
+    return res.json({ message: 'Order cancelled successfully' });
+  } catch (err) {
+    try { await transaction.rollback(); } catch (_) {}
+    console.error('[orderController.cancelOrder]', err);
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
 // ─── PUT /api/admin/orders/:id ────────────────────────────────────────────────
 async function updateOrderStatus(req, res) {
   try {
@@ -286,6 +353,18 @@ async function updateOrderStatus(req, res) {
       }
     );
 
+    // Tự động tạo Bảo hành (Warranties) khi đơn hàng chuyển sang Confirmed
+    if (status === 'Confirmed') {
+      await query(
+        `INSERT INTO Warranties (order_item_id, serial_number, start_date, end_date, status)
+         SELECT oi.order_item_id, UPPER(NEWID()), CAST(GETDATE() AS DATE), CAST(DATEADD(YEAR, 1, GETDATE()) AS DATE), 'Active'
+         FROM OrderItems oi
+         WHERE oi.order_id = @order_id
+           AND NOT EXISTS (SELECT 1 FROM Warranties w WHERE w.order_item_id = oi.order_item_id)`,
+        { order_id: { type: sql.Int, value: order_id } }
+      );
+    }
+
     return res.json({ message: `Order status updated to ${status}` });
   } catch (err) {
     console.error('[orderController.updateOrderStatus]', err);
@@ -299,4 +378,5 @@ module.exports = {
   getOrder,
   getAllOrders,
   updateOrderStatus,
+  cancelOrder,
 };
