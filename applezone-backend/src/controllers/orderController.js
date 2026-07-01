@@ -335,8 +335,13 @@ async function updateOrderStatus(req, res) {
       });
     }
 
+    let updateQuery = `UPDATE Orders SET order_status = @status WHERE order_id = @order_id`;
+    if (status === 'Delivered') {
+      updateQuery = `UPDATE Orders SET order_status = @status, payment_status = 'Paid' WHERE order_id = @order_id`;
+    }
+
     const result = await query(
-      `UPDATE Orders SET order_status = @status WHERE order_id = @order_id`,
+      updateQuery,
       {
         status:   { type: sql.NVarChar(50), value: status },
         order_id: { type: sql.Int, value: order_id },

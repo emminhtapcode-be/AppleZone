@@ -78,10 +78,25 @@ async function updateInventory(req, res) {
   }
 }
 
+// ─── POST /api/admin/upload ───────────────────────────────────────────────
+async function uploadFile(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Không có file nào được tải lên' });
+    }
+    // Trả về đường dẫn công khai
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    res.json({ message: 'Tải ảnh thành công', url: fileUrl });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi tải ảnh', error: err.message });
+  }
+}
+
 module.exports = {
   getRevenueReport,
   getBestSellingProducts,
   getLowStockVariants,
   getInventory,
-  updateInventory
+  updateInventory,
+  uploadFile
 };

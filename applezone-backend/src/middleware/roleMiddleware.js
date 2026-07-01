@@ -8,7 +8,10 @@ function requireRole(...roles) {
     if (!req.user) {
       return res.status(401).json({ detail: 'Not authenticated' });
     }
-    if (!roles.includes(req.user.role)) {
+    const userRole = req.user.role ? req.user.role.toLowerCase() : '';
+    const allowedRoles = roles.map(r => r.toLowerCase());
+    
+    if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({
         detail: `Yêu cầu quyền: ${roles.join(' hoặc ')}. Quyền hiện tại: ${req.user.role}`,
       });
