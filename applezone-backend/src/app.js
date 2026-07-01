@@ -1,5 +1,6 @@
 const express = require('express');
 const cors    = require('cors');
+const path    = require('path');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('../swagger.json');
 require('dotenv').config();
@@ -24,6 +25,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Swagger UI (Tương tự /docs của FastAPI) ──────────────────────────────────
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// ── Static Files (Uploads) ───────────────────────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {

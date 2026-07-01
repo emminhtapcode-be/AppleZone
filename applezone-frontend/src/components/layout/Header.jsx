@@ -42,6 +42,11 @@ const Header = () => {
               <Link to="/my" className="user-greeting" style={{ textDecoration: 'none', color: 'inherit', fontWeight: 'bold' }}>
                 Xin chào, {user ? (user.full_name || 'bạn') : 'bạn'}
               </Link>
+              {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'staff') && (
+                <Link to="/admin" className="icon-btn" title="Trang quản trị">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                </Link>
+              )}
               <button onClick={handleLogout} className="icon-btn" title="Đăng xuất">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
               </button>

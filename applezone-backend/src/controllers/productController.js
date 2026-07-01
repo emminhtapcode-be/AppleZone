@@ -26,13 +26,13 @@ async function getProducts(req, res) {
     const result = await query(
       `SELECT
          p.product_id, p.category_id, p.product_name,
-         (
+         COALESCE(p.thumbnail_url, (
             SELECT TOP 1 i.image_url
             FROM ProductImages i
             INNER JOIN ProductVariants pv ON pv.variant_id = i.variant_id
             WHERE pv.product_id = p.product_id
             ORDER BY i.is_primary DESC
-         ) AS thumbnail_url,
+         )) AS thumbnail_url,
          p.description, CAST(p.base_price AS FLOAT) AS base_price, p.status,
          c.category_name,
          (
@@ -70,13 +70,13 @@ async function getProduct(req, res) {
     const result = await query(
       `SELECT
          p.product_id, p.category_id, p.product_name,
-         (
+         COALESCE(p.thumbnail_url, (
             SELECT TOP 1 i.image_url
             FROM ProductImages i
             INNER JOIN ProductVariants pv ON pv.variant_id = i.variant_id
             WHERE pv.product_id = p.product_id
             ORDER BY i.is_primary DESC
-         ) AS thumbnail_url,
+         )) AS thumbnail_url,
          p.description, CAST(p.base_price AS FLOAT) AS base_price, p.status,
          c.category_name,
          (
@@ -142,13 +142,13 @@ async function getProductsByCategory(req, res) {
     const result = await query(
       `SELECT
          p.product_id, p.category_id, p.product_name,
-         (
+         COALESCE(p.thumbnail_url, (
             SELECT TOP 1 i.image_url
             FROM ProductImages i
             INNER JOIN ProductVariants pv ON pv.variant_id = i.variant_id
             WHERE pv.product_id = p.product_id
             ORDER BY i.is_primary DESC
-         ) AS thumbnail_url,
+         )) AS thumbnail_url,
          p.description, CAST(p.base_price AS FLOAT) AS base_price, p.status,
          c.category_name,
          (
@@ -179,21 +179,22 @@ async function getProductsByCategory(req, res) {
 // ─── POST /api/admin/products ────────────────────────────────────────────────
 async function createProduct(req, res) {
   try {
-    const { category_id, product_name, description, base_price } = req.body;
+    const { category_id, product_name, description, base_price, thumbnail_url } = req.body;
     if (!product_name || !category_id) {
       return res.status(400).json({ detail: 'product_name và category_id là bắt buộc' });
     }
 
     const result = await query(
-      `INSERT INTO Products (category_id, product_name, description, base_price, status)
+      `INSERT INTO Products (category_id, product_name, description, base_price, status, thumbnail_url)
        OUTPUT INSERTED.product_id, INSERTED.category_id, INSERTED.product_name,
-              INSERTED.description, CAST(INSERTED.base_price AS FLOAT) AS base_price, INSERTED.status
-       VALUES (@category_id, @product_name, @description, @base_price, 'active')`,
+              INSERTED.description, CAST(INSERTED.base_price AS FLOAT) AS base_price, INSERTED.status, INSERTED.thumbnail_url
+       VALUES (@category_id, @product_name, @description, @base_price, 'active', @thumbnail_url)`,
       {
         category_id: { type: sql.Int, value: category_id },
         product_name: { type: sql.NVarChar(100), value: product_name },
         description: { type: sql.NVarChar(sql.MAX), value: description || null },
         base_price: { type: sql.Decimal(18, 2), value: base_price || 0 },
+        thumbnail_url: { type: sql.VarChar(500), value: thumbnail_url || null }
       }
     );
 
@@ -208,7 +209,7 @@ async function createProduct(req, res) {
 async function updateProduct(req, res) {
   try {
     const product_id = parseInt(req.params.id);
-    const { category_id, product_name, description, base_price, status } = req.body;
+    const { category_id, product_name, description, base_price, status, thumbnail_url } = req.body;
 
     const existing = await query('SELECT product_id FROM Products WHERE product_id = @id', { id: { type: sql.Int, value: product_id } });
     if (!existing.recordset.length) {
@@ -221,7 +222,8 @@ async function updateProduct(req, res) {
            product_name = COALESCE(@product_name, product_name),
            description = COALESCE(@description, description),
            base_price = COALESCE(@base_price, base_price),
-           status = COALESCE(@status, status)
+           status = COALESCE(@status, status),
+           thumbnail_url = COALESCE(@thumbnail_url, thumbnail_url)
        WHERE product_id = @product_id`,
       {
         product_id: { type: sql.Int, value: product_id },
@@ -230,6 +232,7 @@ async function updateProduct(req, res) {
         description: { type: sql.NVarChar(sql.MAX), value: description !== undefined ? description : null },
         base_price: { type: sql.Decimal(18, 2), value: base_price !== undefined ? base_price : null },
         status: { type: sql.VarChar(10), value: status !== undefined ? status : null },
+        thumbnail_url: { type: sql.VarChar(500), value: thumbnail_url !== undefined ? thumbnail_url : null }
       }
     );
 
@@ -260,6 +263,97 @@ async function deleteProduct(req, res) {
   }
 }
 
+// ─── POST /api/admin/products/:id/variants ───────────────────────────────────
+async function createVariant(req, res) {
+  const transaction = new sql.Transaction(await require('../config/db').getPool());
+  try {
+    const product_id = parseInt(req.params.id);
+    const { color, storage, sku, price, stock_quantity, status, image_url } = req.body;
+    
+    if (!sku || price === undefined) {
+      return res.status(400).json({ detail: 'SKU và price là bắt buộc' });
+    }
+
+    await transaction.begin();
+    const reqTx = transaction.request();
+    
+    // Check sku exist
+    const skuCheck = await reqTx.query(`SELECT variant_id FROM ProductVariants WHERE sku = '${sku}'`);
+    if (skuCheck.recordset.length > 0) {
+      await transaction.rollback();
+      return res.status(400).json({ detail: 'SKU đã tồn tại' });
+    }
+
+    const result = await reqTx.query(`
+      INSERT INTO ProductVariants (product_id, color, storage, sku, price, stock_quantity, status)
+      OUTPUT INSERTED.variant_id
+      VALUES (${product_id}, N'${color || ''}', '${storage || ''}', '${sku}', ${price}, ${stock_quantity || 0}, '${status || 'active'}')
+    `);
+    
+    const variantId = result.recordset[0].variant_id;
+    
+    if (image_url) {
+      await reqTx.query(`
+        INSERT INTO ProductImages (variant_id, image_url, is_primary)
+        VALUES (${variantId}, '${image_url}', 1)
+      `);
+    }
+    
+    await transaction.commit();
+    return res.status(201).json({ variant_id: variantId, message: 'Variant created' });
+  } catch (err) {
+    console.error('[createVariant]', err);
+    if (transaction._isActive) await transaction.rollback();
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+// ─── PUT /api/admin/variants/:variantId ──────────────────────────────────────
+async function updateVariant(req, res) {
+  const transaction = new sql.Transaction(await require('../config/db').getPool());
+  try {
+    const variantId = parseInt(req.params.variantId);
+    const { color, storage, sku, price, stock_quantity, status, image_url } = req.body;
+    
+    await transaction.begin();
+    const reqTx = transaction.request();
+    
+    await reqTx.query(`
+      UPDATE ProductVariants
+      SET color = N'${color || ''}', storage = '${storage || ''}', sku = '${sku}', price = ${price}, stock_quantity = ${stock_quantity}, status = '${status}'
+      WHERE variant_id = ${variantId}
+    `);
+    
+    if (image_url) {
+      // Upsert primary image
+      const existing = await reqTx.query(`SELECT image_id FROM ProductImages WHERE variant_id = ${variantId}`);
+      if (existing.recordset.length > 0) {
+        await reqTx.query(`UPDATE ProductImages SET image_url = '${image_url}', is_primary = 1 WHERE variant_id = ${variantId}`);
+      } else {
+        await reqTx.query(`INSERT INTO ProductImages (variant_id, image_url, is_primary) VALUES (${variantId}, '${image_url}', 1)`);
+      }
+    }
+    
+    await transaction.commit();
+    return res.json({ message: 'Variant updated' });
+  } catch (err) {
+    console.error('[updateVariant]', err);
+    if (transaction._isActive) await transaction.rollback();
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+// ─── DELETE /api/admin/variants/:variantId ───────────────────────────────────
+async function deleteVariant(req, res) {
+  try {
+    const variantId = parseInt(req.params.variantId);
+    await query(`UPDATE ProductVariants SET status = 'inactive' WHERE variant_id = @id`, { id: { type: sql.Int, value: variantId }});
+    return res.json({ message: 'Variant soft deleted' });
+  } catch (err) {
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
 module.exports = {
   getProducts,
   getProduct,
@@ -267,5 +361,8 @@ module.exports = {
   getProductsByCategory,
   createProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  createVariant,
+  updateVariant,
+  deleteVariant
 };
