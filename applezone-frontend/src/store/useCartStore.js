@@ -16,10 +16,10 @@ const useCartStore = create((set, get) => ({
     }
   },
 
-  addToCart: async (productId, quantity = 1) => {
+  addToCart: async (variant_id, quantity = 1) => {
     set({ isLoading: true, error: null });
     try {
-      await api.post('/cart/items', { productId, quantity });
+      await api.post('/cart/add', { variant_id, quantity });
       // Refresh cart after adding
       await get().fetchCart();
     } catch (error) {

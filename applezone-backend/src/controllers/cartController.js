@@ -14,7 +14,13 @@ async function getCart(req, res) {
          v.color, v.storage, v.sku,
          CAST(v.price AS FLOAT)  AS price,
          v.stock_quantity,
-         p.product_id, p.product_name, p.thumbnail_url
+         p.product_id, p.product_name,
+         (
+            SELECT TOP 1 i.image_url
+            FROM ProductImages i
+            WHERE i.variant_id = v.variant_id
+            ORDER BY i.is_primary DESC
+         ) AS thumbnail_url
        FROM Carts c
        LEFT JOIN CartItems          ci ON ci.cart_id    = c.cart_id
        LEFT JOIN ProductVariants    v  ON v.variant_id  = ci.variant_id
@@ -80,7 +86,7 @@ async function addToCart(req, res) {
 
     // Kiểm tra xem variant có tồn tại không
     const variantRes = await query(
-      'SELECT variant_id, stock_quantity FROM ProductVariants WHERE variant_id = @variant_id AND status = 1',
+      "SELECT variant_id, stock_quantity FROM ProductVariants WHERE variant_id = @variant_id AND status = 'active'",
       { variant_id: { type: sql.Int, value: variant_id } }
     );
     if (!variantRes.recordset.length) {

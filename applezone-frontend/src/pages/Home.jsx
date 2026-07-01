@@ -6,9 +6,6 @@ import './Home.css';
 
 const Home = () => {
   const { products, fetchProducts, isLoading } = useProductStore();
-  
-  // Fake countdown for UI
-  const [timeLeft, setTimeLeft] = useState('09 : 30 : 01');
 
   useEffect(() => {
     fetchProducts();
@@ -25,11 +22,7 @@ const Home = () => {
         <section className="flash-sale-section">
           <div className="flash-sale-header">
             <div className="flash-sale-title">
-              <h2>FLASH SALE</h2>
-            </div>
-            <div className="countdown">
-              <span className="countdown-label">KẾT THÚC TRONG</span>
-              <span className="countdown-time">{timeLeft}</span>
+              <h2>SẢN PHẨM MỚI</h2>
             </div>
           </div>
 

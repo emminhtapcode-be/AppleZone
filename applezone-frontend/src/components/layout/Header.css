@@ -1,10 +1,14 @@
 .header {
-  background-color: var(--bg-dark);
-  border-bottom: 1px solid var(--border-color);
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 1000;
-  padding: 0;
+  padding: 10px 0;
+  background: rgba(10, 10, 12, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .header-container {
@@ -21,29 +25,35 @@
 
 .logo-text {
   font-size: 1.5rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-main);
-  letter-spacing: -1px;
+  letter-spacing: -0.05em;
+  display: flex;
+  align-items: center;
 }
 
 .logo-zone {
-  color: #d1123f; /* Similar to topzone red/pink logo color if any, or just keep it simple */
+  color: var(--accent-cyan);
+  font-weight: 400;
 }
 
 .nav-links {
   display: flex;
-  gap: 24px;
+  gap: 32px;
 }
 
 .nav-item {
-  color: var(--text-main);
+  color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 500;
-  transition: color 0.2s;
+  letter-spacing: 0.02em;
+  transition: color 0.3s ease;
+  padding: 8px 0;
 }
 
-.nav-item:hover {
-  color: var(--text-muted);
+.nav-item:hover,
+.nav-item.active {
+  color: var(--text-main);
 }
 
 .header-actions {
@@ -53,39 +63,48 @@
 }
 
 .icon-btn {
-  color: var(--text-main);
-  background: rgba(255, 255, 255, 0.1);
-  width: 36px;
-  height: 36px;
+  color: var(--text-muted);
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  transition: all 0.3s ease;
   position: relative;
+  border: 1px solid transparent;
 }
 
 .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
 }
 
 .cart-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
-  background-color: var(--accent-orange);
-  color: #fff;
+  top: 0;
+  right: 0;
+  background-color: var(--accent-cyan);
+  color: #000;
   font-size: 0.7rem;
-  font-weight: bold;
+  font-weight: 700;
   width: 18px;
   height: 18px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 10px var(--accent-cyan-glow);
 }
 
 .user-greeting {
   font-size: 0.85rem;
   color: var(--text-muted);
+  transition: color 0.3s ease;
+}
+
+.user-greeting:hover {
+  color: var(--text-main);
 }

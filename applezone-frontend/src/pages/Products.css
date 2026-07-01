@@ -1,43 +1,48 @@
 .products-page {
-  padding: 40px 0;
+  padding: 100px 0 60px;
 }
 
 .category-header {
-  font-size: 2rem;
+  font-size: 3rem;
   font-weight: 700;
-  margin-bottom: 30px;
+  margin-bottom: 40px;
   text-align: center;
   color: var(--text-main);
+  letter-spacing: -0.04em;
 }
 
 .filters-bar {
   display: flex;
-  gap: 15px;
-  margin-bottom: 30px;
+  gap: 16px;
+  margin-bottom: 40px;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .filter-btn {
-  padding: 8px 16px;
-  background-color: var(--bg-card);
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  transition: all 0.2s;
+  padding: 12px 24px;
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 30px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
 }
 
 .filter-btn:hover {
-  border-color: #666;
+  border-color: var(--border-hover);
+  color: var(--text-main);
 }
 
 .filter-btn.active {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
+  border-color: var(--text-main);
+  color: #000;
+  background-color: var(--text-main);
 }
 
 .products-grid-full {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 24px;
 }

@@ -8,7 +8,7 @@ async function getProducts(req, res) {
     const skip = parseInt(req.query.skip) || 0;
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
 
-    let where = 'WHERE p.status = 1';
+    let where = "WHERE p.status = 'active'";
     const params = {};
 
     if (category_id) {
@@ -25,14 +25,21 @@ async function getProducts(req, res) {
 
     const result = await query(
       `SELECT
-         p.product_id, p.category_id, p.product_name, p.thumbnail_url,
+         p.product_id, p.category_id, p.product_name,
+         (
+            SELECT TOP 1 i.image_url
+            FROM ProductImages i
+            INNER JOIN ProductVariants pv ON pv.variant_id = i.variant_id
+            WHERE pv.product_id = p.product_id
+            ORDER BY i.is_primary DESC
+         ) AS thumbnail_url,
          p.description, CAST(p.base_price AS FLOAT) AS base_price, p.status,
          c.category_name,
          (
            SELECT v.variant_id, v.color, v.storage, v.sku,
                   CAST(v.price AS FLOAT) AS price, v.stock_quantity, v.status
            FROM ProductVariants v
-           WHERE v.product_id = p.product_id AND v.status = 1
+           WHERE v.product_id = p.product_id AND v.status = 'active'
            FOR JSON PATH
          ) AS variants
        FROM Products p
@@ -62,7 +69,14 @@ async function getProduct(req, res) {
 
     const result = await query(
       `SELECT
-         p.product_id, p.category_id, p.product_name, p.thumbnail_url,
+         p.product_id, p.category_id, p.product_name,
+         (
+            SELECT TOP 1 i.image_url
+            FROM ProductImages i
+            INNER JOIN ProductVariants pv ON pv.variant_id = i.variant_id
+            WHERE pv.product_id = p.product_id
+            ORDER BY i.is_primary DESC
+         ) AS thumbnail_url,
          p.description, CAST(p.base_price AS FLOAT) AS base_price, p.status,
          c.category_name,
          (
@@ -80,7 +94,7 @@ async function getProduct(req, res) {
          ) AS variants
        FROM Products p
        LEFT JOIN Categories c ON c.category_id = p.category_id
-       WHERE p.product_id = @id AND p.status = 1`,
+       WHERE p.product_id = @id AND p.status = 'active'`,
       { id: { type: sql.Int, value: product_id } }
     );
 
@@ -111,7 +125,7 @@ async function getProductVariants(req, res) {
     const result = await query(
       `SELECT variant_id, product_id, color, storage, sku, CAST(price AS FLOAT) AS price, stock_quantity, status
        FROM ProductVariants
-       WHERE product_id = @product_id AND status = 1`,
+       WHERE product_id = @product_id AND status = 'active'`,
       { product_id: { type: sql.Int, value: product_id } }
     );
     return res.json(result.recordset);
@@ -127,19 +141,26 @@ async function getProductsByCategory(req, res) {
     const catId = parseInt(req.params.catId);
     const result = await query(
       `SELECT
-         p.product_id, p.category_id, p.product_name, p.thumbnail_url,
+         p.product_id, p.category_id, p.product_name,
+         (
+            SELECT TOP 1 i.image_url
+            FROM ProductImages i
+            INNER JOIN ProductVariants pv ON pv.variant_id = i.variant_id
+            WHERE pv.product_id = p.product_id
+            ORDER BY i.is_primary DESC
+         ) AS thumbnail_url,
          p.description, CAST(p.base_price AS FLOAT) AS base_price, p.status,
          c.category_name,
          (
            SELECT v.variant_id, v.color, v.storage, v.sku,
                   CAST(v.price AS FLOAT) AS price, v.stock_quantity, v.status
            FROM ProductVariants v
-           WHERE v.product_id = p.product_id AND v.status = 1
+           WHERE v.product_id = p.product_id AND v.status = 'active'
            FOR JSON PATH
          ) AS variants
        FROM Products p
        LEFT JOIN Categories c ON c.category_id = p.category_id
-       WHERE p.category_id = @catId AND p.status = 1`,
+       WHERE p.category_id = @catId AND p.status = 'active'`,
       { catId: { type: sql.Int, value: catId } }
     );
 
@@ -158,20 +179,19 @@ async function getProductsByCategory(req, res) {
 // ─── POST /api/admin/products ────────────────────────────────────────────────
 async function createProduct(req, res) {
   try {
-    const { category_id, product_name, thumbnail_url, description, base_price } = req.body;
+    const { category_id, product_name, description, base_price } = req.body;
     if (!product_name || !category_id) {
       return res.status(400).json({ detail: 'product_name và category_id là bắt buộc' });
     }
 
     const result = await query(
-      `INSERT INTO Products (category_id, product_name, thumbnail_url, description, base_price, status)
-       OUTPUT INSERTED.product_id, INSERTED.category_id, INSERTED.product_name, INSERTED.thumbnail_url,
+      `INSERT INTO Products (category_id, product_name, description, base_price, status)
+       OUTPUT INSERTED.product_id, INSERTED.category_id, INSERTED.product_name,
               INSERTED.description, CAST(INSERTED.base_price AS FLOAT) AS base_price, INSERTED.status
-       VALUES (@category_id, @product_name, @thumbnail_url, @description, @base_price, 1)`,
+       VALUES (@category_id, @product_name, @description, @base_price, 'active')`,
       {
         category_id: { type: sql.Int, value: category_id },
         product_name: { type: sql.NVarChar(100), value: product_name },
-        thumbnail_url: { type: sql.VarChar(255), value: thumbnail_url || null },
         description: { type: sql.NVarChar(sql.MAX), value: description || null },
         base_price: { type: sql.Decimal(18, 2), value: base_price || 0 },
       }
@@ -188,7 +208,7 @@ async function createProduct(req, res) {
 async function updateProduct(req, res) {
   try {
     const product_id = parseInt(req.params.id);
-    const { category_id, product_name, thumbnail_url, description, base_price, status } = req.body;
+    const { category_id, product_name, description, base_price, status } = req.body;
 
     const existing = await query('SELECT product_id FROM Products WHERE product_id = @id', { id: { type: sql.Int, value: product_id } });
     if (!existing.recordset.length) {
@@ -199,7 +219,6 @@ async function updateProduct(req, res) {
       `UPDATE Products
        SET category_id = COALESCE(@category_id, category_id),
            product_name = COALESCE(@product_name, product_name),
-           thumbnail_url = COALESCE(@thumbnail_url, thumbnail_url),
            description = COALESCE(@description, description),
            base_price = COALESCE(@base_price, base_price),
            status = COALESCE(@status, status)
@@ -208,10 +227,9 @@ async function updateProduct(req, res) {
         product_id: { type: sql.Int, value: product_id },
         category_id: { type: sql.Int, value: category_id !== undefined ? category_id : null },
         product_name: { type: sql.NVarChar(100), value: product_name !== undefined ? product_name : null },
-        thumbnail_url: { type: sql.VarChar(255), value: thumbnail_url !== undefined ? thumbnail_url : null },
         description: { type: sql.NVarChar(sql.MAX), value: description !== undefined ? description : null },
         base_price: { type: sql.Decimal(18, 2), value: base_price !== undefined ? base_price : null },
-        status: { type: sql.Bit, value: status !== undefined ? status : null },
+        status: { type: sql.VarChar(10), value: status !== undefined ? status : null },
       }
     );
 
@@ -227,7 +245,7 @@ async function deleteProduct(req, res) {
   try {
     const product_id = parseInt(req.params.id);
     const result = await query(
-      `UPDATE Products SET status = 0 WHERE product_id = @product_id`,
+      `UPDATE Products SET status = 'inactive' WHERE product_id = @product_id`,
       { product_id: { type: sql.Int, value: product_id } }
     );
 

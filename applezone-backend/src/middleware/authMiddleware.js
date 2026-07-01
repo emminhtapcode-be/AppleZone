@@ -17,7 +17,7 @@ async function authenticate(req, res, next) {
     const payload = jwt.verify(token, process.env.SECRET_KEY);
 
     const result = await query(
-      `SELECT USER_ID AS user_id, full_name, email, phone, ROLE AS role, avatar_url
+      `SELECT USER_ID AS user_id, full_name, email, phone, ROLE AS role
        FROM Users WHERE USER_ID = @id`,
       { id: { type: sql.Int, value: payload.sub } }
     );
@@ -29,6 +29,7 @@ async function authenticate(req, res, next) {
     req.user = result.recordset[0];
     next();
   } catch (err) {
+    console.error('[authMiddleware] Auth error:', err);
     return res.status(401).json({ detail: 'Invalid or expired token' });
   }
 }

@@ -3,21 +3,30 @@ import { Link } from 'react-router-dom';
 import './CarouselBanner.css';
 
 const CarouselBanner = () => {
-  // Mock simple banner since we don't have images
   return (
-    <div className="carousel-container">
-      <div 
-        className="carousel-slide" 
-        style={{ 
-          background: 'linear-gradient(135deg, #111 0%, #2a2a2a 100%)' 
-        }}
-      >
-        <div className="carousel-content">
-          <h2 style={{color: '#fff'}}>SAY MƯỚT</h2>
-          <p style={{color: '#ccc'}}>Càng Lướt Càng Yêu.</p>
-          <Link to="/products?category=iphone" className="carousel-btn">
-            Mua ngay
+    <div className="hero-container">
+      <div className="hero-content">
+        <h1 className="hero-title">
+          THE DEFINITIVE SPACE<br />FOR <span className="text-gradient">PREMIUM TECH.</span>
+        </h1>
+        <p className="hero-subtitle">
+          Khám phá không gian công nghệ đỉnh cao với các sản phẩm Apple chính hãng. Đẳng cấp, tinh tế, và dẫn đầu xu hướng.
+        </p>
+        <div className="hero-actions">
+          <Link to="/products?category=iphone" className="btn-primary">
+            Khám phá iPhone
           </Link>
+          <Link to="/products?category=mac" className="btn-secondary">
+            Mua Mac
+          </Link>
+        </div>
+      </div>
+      
+      <div className="hero-visual">
+        <div className="glow-circle"></div>
+        {/* Placeholder for a beautiful 3D render of Apple products */}
+        <div className="mockup-frame glass-panel">
+          <div className="mockup-inner"></div>
         </div>
       </div>
     </div>

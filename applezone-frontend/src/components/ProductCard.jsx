@@ -3,10 +3,7 @@ import { Link } from 'react-router-dom';
 import './ProductCard.css';
 
 const ProductCard = ({ product }) => {
-  // Topzone often has fake original prices if missing, let's mock one if not provided
-  const price = product.base_price;
-  const mockDiscount = 0.15; // 15% discount for UI purposes
-  const originalPrice = price / (1 - mockDiscount);
+  const price = product.base_price || 0;
 
   const formatPrice = (p) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p);
@@ -25,10 +22,6 @@ const ProductCard = ({ product }) => {
         <h3 className="product-name">{product.product_name}</h3>
         <div className="price-container">
           <div className="current-price">{formatPrice(price)}</div>
-          <div className="old-price-row">
-            <span className="original-price">{formatPrice(originalPrice)}</span>
-            <span className="discount-badge">-15%</span>
-          </div>
         </div>
       </div>
     </Link>

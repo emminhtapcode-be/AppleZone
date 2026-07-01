@@ -6,9 +6,9 @@ const Footer = () => {
     <footer className="footer">
       <div className="container">
         <div className="footer-columns">
-          <div className="footer-col">
-            <div className="footer-logo">Top<span style={{color: '#d1123f'}}>Zone</span></div>
-            <p>Khách hàng yêu mến hệ sinh thái Apple sẽ tìm thấy đầy đủ và đa dạng nhất các sản phẩm như iPhone, iPad, Apple Watch, MacBook và các phụ kiện Apple... với không gian mua sắm đẳng cấp, hiện đại.</p>
+          <div className="footer-col brand-col">
+            <div className="footer-logo">Apple<span className="logo-zone">Zone</span></div>
+            <p>Không gian công nghệ đỉnh cao dành cho người dùng hệ sinh thái Apple. Trải nghiệm không gian mua sắm đẳng cấp, hiện đại và chuẩn mực.</p>
           </div>
           
           <div className="footer-col">
@@ -33,8 +33,8 @@ const Footer = () => {
           <div className="footer-col">
             <h4>Tổng đài</h4>
             <ul>
-              <li>Mua hàng: <strong>1900.9696.42</strong> (8:00 - 21:30)</li>
-              <li>Khiếu nại: <strong>1900.9868.43</strong> (8:00 - 21:30)</li>
+              <li>Mua hàng: <strong className="text-highlight">1900.9696.42</strong> (8:00 - 21:30)</li>
+              <li>Khiếu nại: <strong className="text-highlight">1900.9868.43</strong> (8:00 - 21:30)</li>
             </ul>
           </div>
         </div>

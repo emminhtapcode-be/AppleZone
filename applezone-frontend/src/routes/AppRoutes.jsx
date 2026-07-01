@@ -12,6 +12,8 @@ import Cart from '../pages/Cart';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 import NotFound from '../pages/NotFound';
+import Profile from '../pages/Profile';
+import PaymentReturn from '../pages/PaymentReturn';
 
 const AppRoutes = () => {
   return (
@@ -23,6 +25,9 @@ const AppRoutes = () => {
           <Route path="products" element={<Products />} />
           <Route path="products/:id" element={<ProductDetail />} />
           <Route path="cart" element={<Cart />} />
+          <Route path="my" element={<Profile />} />
+          <Route path="payment/success" element={<PaymentReturn status="success" />} />
+          <Route path="payment/failed" element={<PaymentReturn status="failed" />} />
         </Route>
         
         {/* Auth Routes without MainLayout */}

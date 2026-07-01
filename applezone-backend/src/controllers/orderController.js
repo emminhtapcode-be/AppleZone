@@ -33,17 +33,21 @@ async function createOrder(req, res) {
       return r.query(queryStr);
     };
 
-    const addrRes = await txQuery(
-      `SELECT address_id FROM UserAddresses
-       WHERE address_id = @addr_id AND user_id = @user_id`,
-      {
-        addr_id: { type: sql.Int, value: shipping_address_id },
-        user_id: { type: sql.Int, value: user_id },
+    let final_address_id = null;
+    if (shipping_address_id && shipping_address_id !== -1) {
+      const addrRes = await txQuery(
+        `SELECT address_id FROM UserAddresses
+         WHERE address_id = @addr_id AND user_id = @user_id`,
+        {
+          addr_id: { type: sql.Int, value: shipping_address_id },
+          user_id: { type: sql.Int, value: user_id },
+        }
+      );
+      if (!addrRes.recordset.length) {
+        await transaction.rollback();
+        return res.status(400).json({ detail: 'Địa chỉ giao hàng không hợp lệ' });
       }
-    );
-    if (!addrRes.recordset.length) {
-      await transaction.rollback();
-      return res.status(400).json({ detail: 'Địa chỉ giao hàng không hợp lệ' });
+      final_address_id = shipping_address_id;
     }
 
     let total = 0;
@@ -53,7 +57,7 @@ async function createOrder(req, res) {
       const vRes = await txQuery(
         `SELECT variant_id, CAST(price AS FLOAT) AS price, stock_quantity
          FROM ProductVariants WITH (UPDLOCK, ROWLOCK)
-         WHERE variant_id = @id AND status = 1`,
+         WHERE variant_id = @id AND status = 'active'`,
         { id: { type: sql.Int, value: item.variant_id } }
       );
       if (!vRes.recordset.length) {
@@ -115,7 +119,7 @@ async function createOrder(req, res) {
 
     const orderRes = await txQuery(
       `INSERT INTO Orders
-         (user_id, shipping_address_id, coupon_id, total_amount, discount_amount, final_amount, order_status, payment_status)
+         (user_id, address_id, coupon_id, total_amount, discount_amount, final_amount, order_status, payment_status)
        OUTPUT INSERTED.order_id, CAST(INSERTED.total_amount AS FLOAT) AS total_amount,
               CAST(INSERTED.discount_amount AS FLOAT) AS discount_amount,
               CAST(INSERTED.final_amount AS FLOAT) AS final_amount,
@@ -123,7 +127,7 @@ async function createOrder(req, res) {
        VALUES (@user_id, @addr_id, @coupon_id, @total, @discount, @final, 'Pending', 'Unpaid')`,
       {
         user_id:   { type: sql.Int, value: user_id },
-        addr_id:   { type: sql.Int, value: shipping_address_id },
+        addr_id:   { type: sql.Int, value: final_address_id },
         coupon_id: { type: sql.Int, value: coupon_id },
         total:     { type: sql.Decimal(18, 2), value: total },
         discount:  { type: sql.Decimal(18, 2), value: discount },

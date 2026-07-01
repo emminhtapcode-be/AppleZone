@@ -11,12 +11,11 @@ const useAuthStore = create((set) => ({
     set({ isLoading: true, error: null });
     try {
       const data = await api.post('/auth/login', credentials);
-      localStorage.setItem('token', data.token);
-      // Giả sử API trả về user info cùng với token, hoặc mình có thể lấy từ jwt decode
-      set({ user: data.user || null, token: data.token, isLoading: false });
+      localStorage.setItem('token', data.access_token);
+      set({ user: data.user || null, token: data.access_token, isLoading: false });
       return true;
     } catch (error) {
-      set({ error: error.response?.data?.message || 'Lỗi đăng nhập', isLoading: false });
+      set({ error: error.response?.data?.detail || 'Lỗi đăng nhập', isLoading: false });
       return false;
     }
   },
@@ -28,7 +27,7 @@ const useAuthStore = create((set) => ({
       set({ isLoading: false });
       return true;
     } catch (error) {
-      set({ error: error.response?.data?.message || 'Lỗi đăng ký', isLoading: false });
+      set({ error: error.response?.data?.detail || 'Lỗi đăng ký', isLoading: false });
       return false;
     }
   },
@@ -36,6 +35,18 @@ const useAuthStore = create((set) => ({
   logout: () => {
     localStorage.removeItem('token');
     set({ user: null, token: null });
+  },
+
+  checkAuth: async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const data = await api.get('/auth/me');
+      set({ user: data });
+    } catch (error) {
+      localStorage.removeItem('token');
+      set({ user: null, token: null });
+    }
   }
 }));
 

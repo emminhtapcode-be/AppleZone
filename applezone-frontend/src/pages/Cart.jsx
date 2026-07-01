@@ -2,10 +2,13 @@ import React, { useEffect } from 'react';
 import useCartStore from '../store/useCartStore';
 import useAuthStore from '../store/useAuthStore';
 import { Link } from 'react-router-dom';
+import api from '../services/api';
+import './Cart.css';
 
 const Cart = () => {
   const { cartItems, isLoading, error, fetchCart, removeFromCart } = useCartStore();
   const { token } = useAuthStore();
+  const [isProcessing, setIsProcessing] = React.useState(false);
 
   useEffect(() => {
     if (token) {
@@ -13,47 +16,98 @@ const Cart = () => {
     }
   }, [token, fetchCart]);
 
+  const handleCheckout = async () => {
+    try {
+      setIsProcessing(true);
+      const items = cartItems.map(item => ({
+        variant_id: item.variant_id,
+        quantity: item.quantity
+      }));
+      
+      const orderRes = await api.post('/orders', {
+        shipping_address_id: -1, // Bypass
+        items: items
+      });
+      
+      const order_id = orderRes.order_id;
+      if (order_id) {
+        // Request VNPay URL
+        const paymentRes = await api.post('/payments/vnpay/create_payment_url', { order_id });
+        if (paymentRes.paymentUrl) {
+          window.location.href = paymentRes.paymentUrl;
+        }
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      alert('Đã xảy ra lỗi khi thanh toán. Vui lòng thử lại.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (!token) {
     return (
-      <div style={{ textAlign: 'center', marginTop: '50px' }}>
-        <h2>Giỏ hàng</h2>
-        <p>Vui lòng <Link to="/login">đăng nhập</Link> để xem giỏ hàng của bạn.</p>
+      <div className="cart-page container">
+        <div className="cart-empty glass-panel">
+          <h2>Giỏ hàng</h2>
+          <p>Vui lòng <Link to="/login" className="text-link">đăng nhập</Link> để xem giỏ hàng của bạn.</p>
+        </div>
       </div>
     );
   }
 
-  if (isLoading) return <p>Đang tải giỏ hàng...</p>;
-  if (error) return <p style={{ color: 'red' }}>Lỗi: {error}</p>;
+  if (isLoading) return <div className="cart-page container"><p className="loading-text">Đang tải giỏ hàng...</p></div>;
+  if (error) return <div className="cart-page container"><p className="error-text" style={{color: 'red', marginTop: '40px'}}>Lỗi: {error}</p></div>;
 
   return (
-    <div>
-      <h2>Giỏ hàng của bạn</h2>
+    <div className="cart-page container">
+      <h2 className="cart-title">Giỏ hàng của bạn</h2>
       {cartItems.length === 0 ? (
-        <p>Giỏ hàng đang trống. <Link to="/products">Tiếp tục mua sắm</Link></p>
+        <div className="cart-empty glass-panel">
+          <p>Giỏ hàng đang trống.</p>
+          <Link to="/products" className="btn-primary mt-4 inline-block">Tiếp tục mua sắm</Link>
+        </div>
       ) : (
-        <div style={{ marginTop: '20px' }}>
-          {cartItems.map((item) => (
-            <div key={item._id || item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' }}>
-              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                {item.product?.image && <img src={item.product.image} alt={item.product.name} style={{ width: '50px', height: '50px', objectFit: 'cover' }} />}
-                <div>
-                  <h4>{item.product?.name || 'Sản phẩm không xác định'}</h4>
-                  <p>Số lượng: {item.quantity}</p>
+        <div className="cart-content">
+          <div className="cart-items">
+            {cartItems.map((item) => (
+              <div key={item.cart_item_id} className="cart-item glass-card">
+                <div className="cart-item-info">
+                  {item.thumbnail_url ? (
+                    <img src={item.thumbnail_url} alt={item.product_name} className="cart-item-img" />
+                  ) : (
+                    <div className="cart-item-img-placeholder">Ảnh</div>
+                  )}
+                  <div>
+                    <h4 className="cart-item-name">{item.product_name || 'Sản phẩm'} {item.storage ? `(${item.storage})` : ''}</h4>
+                    <p className="cart-item-quantity">Số lượng: {item.quantity} {item.color ? `- Màu: ${item.color}` : ''}</p>
+                  </div>
+                </div>
+                <div className="cart-item-actions">
+                  <p className="cart-item-price">{item.price ? (item.price * item.quantity).toLocaleString('vi-VN') : 0}đ</p>
+                  <button 
+                    onClick={() => removeFromCart(item.cart_item_id)}
+                    className="btn-remove"
+                  >
+                    Xóa
+                  </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <p style={{ fontWeight: 'bold' }}>{item.product?.price ? item.product.price * item.quantity : 0}đ</p>
-                <button 
-                  onClick={() => removeFromCart(item._id || item.id)}
-                  style={{ padding: '5px 10px', background: 'red', color: '#fff', border: 'none', cursor: 'pointer', borderRadius: '3px' }}
-                >
-                  Xóa
-                </button>
-              </div>
+            ))}
+          </div>
+          <div className="cart-summary glass-panel">
+            <h3>Tổng cộng</h3>
+            <div className="summary-row">
+              <span>Tạm tính</span>
+              <span>{cartItems.reduce((acc, item) => acc + (item.price || 0) * item.quantity, 0).toLocaleString('vi-VN')}đ</span>
             </div>
-          ))}
-          <div style={{ textAlign: 'right', marginTop: '20px' }}>
-            <button style={{ padding: '10px 20px', background: '#222', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '1.1rem' }}>Thanh toán</button>
+            <button 
+              className="btn-primary full-width mt-4" 
+              onClick={handleCheckout}
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Đang xử lý...' : 'Thanh toán VNPay'}
+            </button>
           </div>
         </div>
       )}

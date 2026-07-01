@@ -1,20 +1,35 @@
 .home-page {
-  padding-bottom: 60px;
+  padding-bottom: 100px;
 }
 
 .flash-sale-section {
-  background: linear-gradient(180deg, #1f1f1f 0%, #111 100%);
-  border-radius: 20px;
-  padding: 30px;
-  margin-bottom: 40px;
-  border: 1px solid #333;
+  background: var(--bg-card);
+  border-radius: 24px;
+  padding: 40px;
+  margin-bottom: 60px;
+  border: 1px solid var(--border-subtle);
+  position: relative;
+  overflow: hidden;
+}
+
+.flash-sale-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+  opacity: 0.5;
 }
 
 .flash-sale-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  align-items: flex-end;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 20px;
 }
 
 .flash-sale-title {
@@ -24,44 +39,52 @@
 }
 
 .flash-sale-title h2 {
-  font-size: 2rem;
-  font-weight: 800;
-  color: var(--accent-orange);
-  font-style: italic;
-  letter-spacing: -1px;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+  margin: 0;
 }
 
 .countdown {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background-color: #000;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid #333;
+  gap: 12px;
+  background-color: rgba(0, 229, 255, 0.1);
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
 }
 
 .countdown-label {
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--accent-cyan);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .countdown-time {
   font-weight: 700;
   color: #fff;
   letter-spacing: 2px;
+  font-size: 1.2rem;
 }
 
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 24px;
 }
 
 .section-title {
-  font-size: 1.5rem;
+  font-size: 2rem;
   font-weight: 700;
-  margin-bottom: 20px;
+  margin-bottom: 32px;
   color: var(--text-main);
-  text-align: center;
+  letter-spacing: -0.02em;
+}
+
+.featured-section {
+  padding: 40px 0;
 }

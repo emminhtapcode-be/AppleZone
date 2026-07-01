@@ -17,7 +17,7 @@ async function register(req, res) {
 
     // Kiểm tra email đã tồn tại
     const existing = await query(
-      'SELECT USER_ID AS user_id FROM Users WHERE email = @email',
+      'SELECT user_id FROM Users WHERE email = @email',
       { email: { type: sql.NVarChar, value: email } }
     );
     if (existing.recordset.length > 0) {
@@ -27,10 +27,10 @@ async function register(req, res) {
     const password_hash = await bcrypt.hash(password, 12);
 
     const result = await query(
-      `INSERT INTO Users (full_name, email, phone, password_hash, ROLE)
-       OUTPUT INSERTED.USER_ID AS user_id, INSERTED.full_name, INSERTED.email,
-              INSERTED.phone, INSERTED.ROLE AS role, INSERTED.avatar_url, INSERTED.created_at
-       VALUES (@full_name, @email, @phone, @password_hash, 'Customer')`,
+      `INSERT INTO Users (full_name, email, phone, password_hash, role)
+       OUTPUT INSERTED.user_id, INSERTED.full_name, INSERTED.email,
+              INSERTED.phone, INSERTED.role, INSERTED.created_at
+       VALUES (@full_name, @email, @phone, @password_hash, 'customer')`,
       {
         full_name:     { type: sql.NVarChar(100), value: full_name },
         email:         { type: sql.NVarChar(100), value: email },
@@ -56,7 +56,7 @@ async function login(req, res) {
     }
 
     const result = await query(
-      `SELECT USER_ID AS user_id, full_name, email, phone, password_hash, ROLE AS role, avatar_url, created_at
+      `SELECT user_id, full_name, email, phone, password_hash, role, created_at
        FROM Users WHERE email = @email`,
       { email: { type: sql.NVarChar, value: email } }
     );
