@@ -15,8 +15,9 @@ CREATE TABLE Users (
     email VARCHAR(150) NOT NULL UNIQUE,
     phone VARCHAR(15) NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(10) NOT NULL DEFAULT 'customer'
-    CHECK (role IN ('customer','staff','admin')),
+    role VARCHAR(10) NOT NULL DEFAULT 'Customer'
+    CHECK (role IN ('Customer','Staff','Admin')),
+    avatar_url VARCHAR(500) NULL,
     created_at DATETIME NOT NULL DEFAULT GETDATE()
 );
 GO
