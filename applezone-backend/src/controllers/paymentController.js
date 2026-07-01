@@ -4,241 +4,327 @@ const crypto = require('crypto');
 const qs = require('qs');
 const vnpayConfig = require('../config/vnpay');
 
-// Helper sort object for VNPay
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function sortObject(obj) {
-  let sorted = {};
-  let str = [];
-  let key;
-  for (key in obj) {
-    if (obj.hasOwnProperty(key)) {
-      str.push(encodeURIComponent(key));
-    }
-  }
-  str.sort();
-  for (key = 0; key < str.length; key++) {
-    sorted[str[key]] = encodeURIComponent(obj[str[key]]).replace(/%20/g, "+");
+  const sorted = {};
+  const keys = Object.keys(obj).sort();
+  for (const key of keys) {
+    sorted[encodeURIComponent(key)] = encodeURIComponent(obj[key]).replace(/%20/g, '+');
   }
   return sorted;
 }
 
-// ─── POST /api/payments/confirm ──────────────────────────────────────────────
-async function confirmPayment(req, res) {
-  try {
-    const { order_id, payment_method } = req.body;
-
-    if (!order_id || !payment_method) {
-      return res.status(400).json({ detail: 'order_id và payment_method là bắt buộc' });
-    }
-
-    // Lấy thông tin đơn hàng
-    const orderRes = await query(
-      `SELECT order_id, CAST(final_amount AS FLOAT) AS final_amount, payment_status
-       FROM Orders WHERE order_id = @order_id`,
-      { order_id: { type: sql.Int, value: order_id } }
-    );
-
-    if (!orderRes.recordset.length) {
-      return res.status(404).json({ detail: 'Order not found' });
-    }
-
-    const order = orderRes.recordset[0];
-    if (order.payment_status === 'Paid') {
-      return res.status(400).json({ detail: 'Đơn hàng đã được thanh toán' });
-    }
-
-    // Gọi stored procedure sp_ConfirmPayment
-    await query(
-      `EXEC sp_ConfirmPayment @order_id = @order_id, @payment_method = @payment_method, @amount = @amount`,
-      {
-        order_id:       { type: sql.Int, value: order_id },
-        payment_method: { type: sql.NVarChar(50), value: payment_method },
-        amount:         { type: sql.Decimal(18,2), value: order.final_amount },
-      }
-    );
-
-    // Tự động tạo Bảo hành (Warranties) khi đơn hàng thanh toán xong
-    await query(
-      `INSERT INTO Warranties (order_item_id, serial_number, start_date, end_date, status)
-       SELECT oi.order_item_id, UPPER(NEWID()), CAST(GETDATE() AS DATE), CAST(DATEADD(YEAR, 1, GETDATE()) AS DATE), 'Active'
-       FROM OrderItems oi
-       WHERE oi.order_id = @order_id
-         AND NOT EXISTS (SELECT 1 FROM Warranties w WHERE w.order_item_id = oi.order_item_id)`,
-      { order_id: { type: sql.Int, value: order_id } }
-    );
-
-    return res.json({ message: 'Payment confirmed successfully via sp_ConfirmPayment' });
-  } catch (err) {
-    console.error('[paymentController.confirmPayment]', err);
-    return res.status(500).json({ detail: 'Internal server error' });
-  }
+async function getOrderById(orderId) {
+  const result = await query(
+    `SELECT order_id, CAST(final_amount AS FLOAT) AS final_amount, payment_status
+     FROM Orders
+     WHERE order_id = @order_id`,
+    { order_id: { type: sql.Int, value: parseInt(orderId, 10) } }
+  );
+  return result.recordset[0] || null;
 }
 
-// ─── POST /api/payments/create_payment_url ────────────────────────────────
-async function create_payment_url(req, res) {
+async function markOrderPaid(orderId, paymentMethod = 'VNPay') {
+  const order = await getOrderById(orderId);
+  if (!order) return { ok: false, code: 'ORDER_NOT_FOUND' };
+  if (String(order.payment_status).toLowerCase() === 'paid') {
+    return { ok: true, alreadyPaid: true, order };
+  }
+
+  // Insert payment record
+  await query(
+    `INSERT INTO Payments (order_id, payment_method, amount, payment_status, paid_at)
+     VALUES (@order_id, @payment_method, @amount, 'completed', GETDATE())`,
+    {
+      order_id:       { type: sql.Int, value: order.order_id },
+      payment_method: { type: sql.VarChar(20), value: paymentMethod },
+      amount:         { type: sql.Decimal(18, 2), value: order.final_amount },
+    }
+  );
+
+  // Update order status
+  await query(
+    `UPDATE Orders
+     SET payment_status = 'paid', order_status = 'confirmed'
+     WHERE order_id = @order_id`,
+    { order_id: { type: sql.Int, value: order.order_id } }
+  );
+
+  // Add tracking record
+  await query(
+    `INSERT INTO OrderTracking (order_id, status, note)
+     VALUES (@order_id, 'confirmed', 'Payment confirmed via VNPay')`,
+    { order_id: { type: sql.Int, value: order.order_id } }
+  );
+
+  // Auto-create warranties
+  await query(
+    `INSERT INTO Warranties (order_item_id, serial_number, start_date, end_date, status)
+     SELECT oi.order_item_id, UPPER(NEWID()), CAST(GETDATE() AS DATE), CAST(DATEADD(YEAR, 1, GETDATE()) AS DATE), 'active'
+     FROM OrderItems oi
+     WHERE oi.order_id = @order_id
+       AND NOT EXISTS (SELECT 1 FROM Warranties w WHERE w.order_item_id = oi.order_item_id)`,
+    { order_id: { type: sql.Int, value: order.order_id } }
+  );
+
+  return { ok: true, alreadyPaid: false, order };
+}
+
+async function markOrderPaymentFailed(orderId, paymentMethod = 'VNPay') {
+  const order = await getOrderById(orderId);
+  if (!order || String(order.payment_status).toLowerCase() === 'paid') return;
+
+  await query(
+    `INSERT INTO Payments (order_id, payment_method, amount, payment_status, paid_at)
+     VALUES (@order_id, @payment_method, @amount, 'failed', GETDATE())`,
+    {
+      order_id:       { type: sql.Int, value: order.order_id },
+      payment_method: { type: sql.VarChar(20), value: paymentMethod },
+      amount:         { type: sql.Decimal(18, 2), value: order.final_amount },
+    }
+  );
+}
+
+function verifyVnpaySignature(vnpParams) {
+  const params = { ...vnpParams };
+  const secureHash = params.vnp_SecureHash;
+
+  delete params.vnp_SecureHash;
+  delete params.vnp_SecureHashType;
+
+  const sortedParams = sortObject(params);
+  const signData = qs.stringify(sortedParams, { encode: false });
+  const signed = crypto
+    .createHmac('sha512', vnpayConfig.vnp_HashSecret)
+    .update(Buffer.from(signData, 'utf-8'))
+    .digest('hex');
+
+  return secureHash === signed;
+}
+
+// ── POST /api/v1/payments/vnpay/create_payment_url ───────────────────────────
+// Frontend gọi sau khi tạo order, trả về paymentUrl để redirect tới VNPay
+async function createPaymentUrl(req, res) {
   try {
     const { order_id } = req.body;
     if (!order_id) {
       return res.status(400).json({ detail: 'order_id is required' });
     }
 
-    const orderRes = await query(
-      `SELECT order_id, CAST(final_amount AS FLOAT) AS final_amount
-       FROM Orders WHERE order_id = @order_id`,
-      { order_id: { type: sql.Int, value: order_id } }
-    );
-
-    if (!orderRes.recordset.length) {
+    const order = await getOrderById(order_id);
+    if (!order) {
       return res.status(404).json({ detail: 'Order not found' });
     }
-    const order = orderRes.recordset[0];
-    const amount = order.final_amount;
+    if (String(order.payment_status).toLowerCase() === 'paid') {
+      return res.status(400).json({ detail: 'Order already paid' });
+    }
 
     process.env.TZ = 'Asia/Ho_Chi_Minh';
-    let date = new Date();
-    let createDate = moment(date).format('YYYYMMDDHHmmss');
-    
-    let ipAddr = req.headers['x-forwarded-for'] ||
-        req.connection.remoteAddress ||
-        req.socket.remoteAddress ||
-        req.connection.socket.remoteAddress;
+    const date = new Date();
+    const createDate = moment(date).format('YYYYMMDDHHmmss');
+    const expireDate = moment(date).add(15, 'minutes').format('YYYYMMDDHHmmss');
 
-    let tmnCode = vnpayConfig.vnp_TmnCode;
-    let secretKey = vnpayConfig.vnp_HashSecret;
-    let vnpUrl = vnpayConfig.vnp_Url;
-    let returnUrl = vnpayConfig.vnp_ReturnUrl;
+    const ipAddr = (
+      req.headers['x-forwarded-for'] ||
+      req.connection.remoteAddress ||
+      req.socket.remoteAddress ||
+      '127.0.0.1'
+    ).split(',')[0].trim();
 
-    let expireDate = moment(date).add(15, 'minutes').format('YYYYMMDDHHmmss');
+    let vnpParams = {
+      vnp_Version:    '2.1.0',
+      vnp_Command:    'pay',
+      vnp_TmnCode:    vnpayConfig.vnp_TmnCode,
+      vnp_Locale:     'vn',
+      vnp_CurrCode:   'VND',
+      vnp_TxnRef:     String(order.order_id),
+      vnp_OrderInfo:  `Thanh toan don hang #${order.order_id}`,
+      vnp_OrderType:  'other',
+      vnp_Amount:     Math.round(order.final_amount * 100),
+      vnp_ReturnUrl:  vnpayConfig.vnp_ReturnUrl,
+      vnp_IpAddr:     ipAddr,
+      vnp_CreateDate: createDate,
+      vnp_ExpireDate: expireDate,
+    };
 
-    let vnp_Params = {};
-    vnp_Params['vnp_Version'] = '2.1.0';
-    vnp_Params['vnp_Command'] = 'pay';
-    vnp_Params['vnp_TmnCode'] = tmnCode;
-    vnp_Params['vnp_Locale'] = 'vn';
-    vnp_Params['vnp_CurrCode'] = 'VND';
-    vnp_Params['vnp_TxnRef'] = order_id;
-    vnp_Params['vnp_OrderInfo'] = 'Thanh toan don hang ' + order_id;
-    vnp_Params['vnp_OrderType'] = 'other';
-    vnp_Params['vnp_Amount'] = amount * 100;
-    vnp_Params['vnp_ReturnUrl'] = returnUrl;
-    vnp_Params['vnp_IpAddr'] = ipAddr;
-    vnp_Params['vnp_CreateDate'] = createDate;
-    vnp_Params['vnp_ExpireDate'] = expireDate;
+    vnpParams = sortObject(vnpParams);
 
-    vnp_Params = sortObject(vnp_Params);
+    const signData = qs.stringify(vnpParams, { encode: false });
+    const secureHash = crypto
+      .createHmac('sha512', vnpayConfig.vnp_HashSecret)
+      .update(Buffer.from(signData, 'utf-8'))
+      .digest('hex');
 
-    let signData = qs.stringify(vnp_Params, { encode: false });
-    let hmac = crypto.createHmac("sha512", secretKey);
-    let signed = hmac.update(new Buffer.from(signData, 'utf-8')).digest("hex"); 
-    vnp_Params['vnp_SecureHash'] = signed;
-    vnpUrl += '?' + qs.stringify(vnp_Params, { encode: false });
+    vnpParams.vnp_SecureHash = secureHash;
 
-    return res.json({ paymentUrl: vnpUrl });
+    const paymentUrl = `${vnpayConfig.vnp_Url}?${qs.stringify(vnpParams, { encode: false })}`;
+
+    return res.json({ paymentUrl });
   } catch (error) {
-    console.error('[create_payment_url]', error);
+    console.error('[paymentController.createPaymentUrl]', error);
     return res.status(500).json({ detail: 'Internal server error' });
   }
 }
 
-// ─── GET /api/payments/vnpay_return ───────────────────────────────────────
-async function vnpay_return(req, res) {
-  let vnp_Params = req.query;
+// ── POST /api/v1/payments/vnpay/verify ───────────────────────────────────────
+// Frontend gọi sau khi VNPay redirect về /payment/result?vnp_...
+// Gửi toàn bộ query params từ URL lên để backend verify chữ ký & xử lý
+async function vnpayVerify(req, res) {
+  try {
+    const vnpParams = req.body; // Frontend gửi toàn bộ query params lên
 
-  let secureHash = vnp_Params['vnp_SecureHash'];
-
-  delete vnp_Params['vnp_SecureHash'];
-  delete vnp_Params['vnp_SecureHashType'];
-
-  vnp_Params = sortObject(vnp_Params);
-
-  let tmnCode = vnpayConfig.vnp_TmnCode;
-  let secretKey = vnpayConfig.vnp_HashSecret;
-
-  let signData = qs.stringify(vnp_Params, { encode: false });
-  let hmac = crypto.createHmac("sha512", secretKey);
-  let signed = hmac.update(new Buffer.from(signData, 'utf-8')).digest("hex");     
-
-  let redirectUrl = process.env.CORS_ORIGIN || 'http://localhost:5173';
-
-  if(secureHash === signed){
-    if (vnp_Params['vnp_ResponseCode'] == '00') {
-      return res.redirect(`${redirectUrl}/payment/success?orderId=${vnp_Params['vnp_TxnRef']}`);
-    } else {
-      return res.redirect(`${redirectUrl}/payment/failed`);
+    if (!vnpParams || !vnpParams.vnp_SecureHash) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing VNPay parameters',
+      });
     }
-  } else {
-    return res.redirect(`${redirectUrl}/payment/failed`);
+
+    const orderId = vnpParams.vnp_TxnRef;
+    const isValid = verifyVnpaySignature(vnpParams);
+
+    if (!isValid) {
+      return res.json({
+        success: false,
+        message: 'Chữ ký không hợp lệ. Giao dịch có thể bị giả mạo.',
+        orderId,
+      });
+    }
+
+    const responseCode = vnpParams.vnp_ResponseCode;
+    const transactionStatus = vnpParams.vnp_TransactionStatus;
+
+    if (responseCode === '00' && transactionStatus === '00') {
+      // Thanh toán thành công
+      const result = await markOrderPaid(orderId, 'VNPay');
+
+      if (!result.ok) {
+        return res.json({
+          success: false,
+          message: 'Order not found',
+          orderId,
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: result.alreadyPaid
+          ? 'Đơn hàng đã được thanh toán trước đó.'
+          : 'Thanh toán thành công!',
+        orderId,
+        amount: parseInt(vnpParams.vnp_Amount, 10) / 100,
+        transactionNo: vnpParams.vnp_TransactionNo || '',
+        bankCode: vnpParams.vnp_BankCode || '',
+        payDate: vnpParams.vnp_PayDate || '',
+      });
+    }
+
+    // Thanh toán thất bại hoặc bị hủy
+    await markOrderPaymentFailed(orderId, 'VNPay');
+
+    const errorMessages = {
+      '07': 'Trừ tiền thành công nhưng giao dịch bị nghi ngờ (liên hệ VNPay).',
+      '09': 'Thẻ/Tài khoản chưa đăng ký dịch vụ InternetBanking.',
+      '10': 'Xác thực thông tin thẻ/tài khoản không đúng quá 3 lần.',
+      '11': 'Đã hết hạn chờ thanh toán. Vui lòng thử lại.',
+      '12': 'Thẻ/Tài khoản bị khóa.',
+      '13': 'Quý khách nhập sai mật khẩu xác thực (OTP).',
+      '24': 'Quý khách đã hủy giao dịch.',
+      '51': 'Tài khoản không đủ số dư để thực hiện giao dịch.',
+      '65': 'Tài khoản đã vượt quá hạn mức giao dịch trong ngày.',
+      '75': 'Ngân hàng thanh toán đang bảo trì.',
+      '79': 'Nhập sai mật khẩu thanh toán quá số lần quy định.',
+      '99': 'Lỗi không xác định.',
+    };
+
+    return res.json({
+      success: false,
+      message: errorMessages[responseCode] || `Thanh toán thất bại (Mã lỗi: ${responseCode})`,
+      orderId,
+      responseCode,
+    });
+  } catch (error) {
+    console.error('[paymentController.vnpayVerify]', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi hệ thống khi xác minh thanh toán',
+    });
   }
 }
 
-// ─── GET /api/payments/vnpay_ipn ──────────────────────────────────────────
-async function vnpay_ipn(req, res) {
-  let vnp_Params = req.query;
-  let secureHash = vnp_Params['vnp_SecureHash'];
-  
-  let orderId = vnp_Params['vnp_TxnRef'];
-  let rspCode = vnp_Params['vnp_ResponseCode'];
+// ── VNPay server-to-server callback (IPN) ────────────────────────────────────
+// Supports both GET and POST requests
+async function vnpayIpn(req, res) {
+  try {
+    // VNPay may send GET (req.query) or POST (req.body)
+    const vnpParams = Object.keys(req.query).length > 0 ? req.query : req.body;
 
-  delete vnp_Params['vnp_SecureHash'];
-  delete vnp_Params['vnp_SecureHashType'];
+    const isValid = verifyVnpaySignature(vnpParams);
+    const orderId = vnpParams.vnp_TxnRef;
 
-  vnp_Params = sortObject(vnp_Params);
-  let secretKey = vnpayConfig.vnp_HashSecret;
-  let signData = qs.stringify(vnp_Params, { encode: false });
-  let hmac = crypto.createHmac("sha512", secretKey);
-  let signed = hmac.update(new Buffer.from(signData, 'utf-8')).digest("hex");     
-
-  if(secureHash === signed){
-    const orderRes = await query(
-      `SELECT order_id, CAST(final_amount AS FLOAT) AS final_amount, payment_status
-       FROM Orders WHERE order_id = @order_id`,
-      { order_id: { type: sql.Int, value: orderId } }
-    );
-    if (!orderRes.recordset.length) {
-      return res.status(200).json({RspCode: '01', Message: 'Order not found'});
-    }
-    const order = orderRes.recordset[0];
-    if(order.payment_status === 'Paid') {
-      return res.status(200).json({RspCode: '02', Message: 'Order already confirmed'});
+    if (!isValid) {
+      return res.status(200).json({ RspCode: '97', Message: 'Checksum failed' });
     }
 
-    if (rspCode == '00') {
-      // Gọi stored procedure sp_ConfirmPayment
-      await query(
-        `EXEC sp_ConfirmPayment @order_id = @order_id, @payment_method = 'VNPay', @amount = @amount`,
-        {
-          order_id:       { type: sql.Int, value: orderId },
-          amount:         { type: sql.Decimal(18,2), value: order.final_amount },
-        }
-      );
-      // Create warranties
-      await query(
-        `INSERT INTO Warranties (order_item_id, serial_number, start_date, end_date, status)
-         SELECT oi.order_item_id, UPPER(NEWID()), CAST(GETDATE() AS DATE), CAST(DATEADD(YEAR, 1, GETDATE()) AS DATE), 'Active'
-         FROM OrderItems oi
-         WHERE oi.order_id = @order_id
-           AND NOT EXISTS (SELECT 1 FROM Warranties w WHERE w.order_item_id = oi.order_item_id)`,
-        { order_id: { type: sql.Int, value: orderId } }
-      );
-      return res.status(200).json({RspCode: '00', Message: 'Success'});
+    const order = await getOrderById(orderId);
+    if (!order) {
+      return res.status(200).json({ RspCode: '01', Message: 'Order not found' });
+    }
+
+    const expectedAmount = Math.round(order.final_amount * 100);
+    if (parseInt(vnpParams.vnp_Amount, 10) !== expectedAmount) {
+      return res.status(200).json({ RspCode: '04', Message: 'Invalid amount' });
+    }
+
+    if (String(order.payment_status).toLowerCase() === 'paid') {
+      return res.status(200).json({ RspCode: '02', Message: 'Order already confirmed' });
+    }
+
+    if (vnpParams.vnp_ResponseCode === '00' && vnpParams.vnp_TransactionStatus === '00') {
+      await markOrderPaid(orderId, 'VNPay');
     } else {
-      return res.status(200).json({RspCode: '00', Message: 'Success'});
+      await markOrderPaymentFailed(orderId, 'VNPay');
     }
-  } else {
-    return res.status(200).json({RspCode: '97', Message: 'Checksum failed'});
+
+    return res.status(200).json({ RspCode: '00', Message: 'Success' });
+  } catch (error) {
+    console.error('[paymentController.vnpayIpn]', error);
+    return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
   }
 }
 
-// ─── GET /api/payments/:orderId ───────────────────────────────────────────────
+// ── POST /api/v1/payments/confirm ────────────────────────────────────────────
+// Manual payment confirmation (COD, BankTransfer, etc.)
+async function confirmPayment(req, res) {
+  try {
+    const { order_id, payment_method } = req.body;
+    if (!order_id || !payment_method) {
+      return res.status(400).json({ detail: 'order_id and payment_method are required' });
+    }
+
+    const result = await markOrderPaid(order_id, payment_method);
+    if (!result.ok) {
+      return res.status(404).json({ detail: 'Order not found' });
+    }
+
+    return res.json({ message: 'Payment confirmed successfully' });
+  } catch (err) {
+    console.error('[paymentController.confirmPayment]', err);
+    return res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+// ── GET /api/v1/payments/:orderId ────────────────────────────────────────────
 async function getPaymentHistory(req, res) {
   try {
-    const order_id = parseInt(req.params.orderId);
-
+    const order_id = parseInt(req.params.orderId, 10);
     const result = await query(
       `SELECT payment_id, order_id, payment_method, CAST(amount AS FLOAT) AS amount, payment_status, paid_at
-       FROM Payments WHERE order_id = @order_id`,
+       FROM Payments WHERE order_id = @order_id
+       ORDER BY paid_at DESC`,
       { order_id: { type: sql.Int, value: order_id } }
     );
-
     return res.json(result.recordset);
   } catch (err) {
     console.error('[paymentController.getPaymentHistory]', err);
@@ -246,50 +332,44 @@ async function getPaymentHistory(req, res) {
   }
 }
 
-// ─── POST /api/coupons/validate ──────────────────────────────────────────────
+// ── POST /api/v1/coupons/validate ────────────────────────────────────────────
 async function validateCoupon(req, res) {
   try {
     const { coupon_code } = req.body;
-
     if (!coupon_code) {
-      return res.status(400).json({ detail: 'coupon_code là bắt buộc' });
+      return res.status(400).json({ detail: 'coupon_code is required' });
     }
 
     const result = await query(
-      `SELECT coupon_id, coupon_code, discount_type, CAST(discount_value AS FLOAT) AS discount_value,
-              CAST(min_order_value AS FLOAT) AS min_order_value, CAST(max_discount AS FLOAT) AS max_discount,
-              start_date, end_date, usage_limit, used_count, status
+      `SELECT coupon_id, code, discount_type, CAST(discount_value AS FLOAT) AS discount_value,
+              CAST(min_order_amount AS FLOAT) AS min_order_amount, start_date, end_date, usage_limit, used_count
        FROM Coupons
-       WHERE coupon_code = @code AND status = 1 AND end_date > GETDATE() AND start_date <= GETDATE()`,
+       WHERE code = @code AND end_date > GETDATE() AND start_date <= GETDATE()`,
       { code: { type: sql.NVarChar, value: coupon_code } }
     );
 
     if (!result.recordset.length) {
-      return res.status(400).json({ detail: 'Mã giảm giá không hợp lệ hoặc đã hết hạn' });
+      return res.status(400).json({ detail: 'Coupon is invalid or expired' });
     }
 
     const coupon = result.recordset[0];
     if (coupon.usage_limit !== null && coupon.used_count >= coupon.usage_limit) {
-      return res.status(400).json({ detail: 'Mã giảm giá đã đạt số lần giới hạn sử dụng' });
+      return res.status(400).json({ detail: 'Coupon usage limit reached' });
     }
 
-    return res.json({
-      valid: true,
-      coupon
-    });
+    return res.json({ valid: true, coupon });
   } catch (err) {
     console.error('[paymentController.validateCoupon]', err);
     return res.status(500).json({ detail: 'Internal server error' });
   }
 }
 
-// ─── GET /api/admin/coupons ───────────────────────────────────────────────────
+// ── GET /api/v1/admin/coupons ────────────────────────────────────────────────
 async function getCoupons(req, res) {
   try {
     const result = await query(
-      `SELECT coupon_id, coupon_code, discount_type, CAST(discount_value AS FLOAT) AS discount_value,
-              CAST(min_order_value AS FLOAT) AS min_order_value, CAST(max_discount AS FLOAT) AS max_discount,
-              start_date, end_date, usage_limit, used_count, status
+      `SELECT coupon_id, code, discount_type, CAST(discount_value AS FLOAT) AS discount_value,
+              CAST(min_order_amount AS FLOAT) AS min_order_amount, start_date, end_date, usage_limit, used_count
        FROM Coupons
        ORDER BY coupon_id DESC`
     );
@@ -300,30 +380,30 @@ async function getCoupons(req, res) {
   }
 }
 
-// ─── POST /api/admin/coupons ──────────────────────────────────────────────────
+// ── POST /api/v1/admin/coupons ───────────────────────────────────────────────
 async function createCoupon(req, res) {
   try {
-    const { coupon_code, discount_type, discount_value, min_order_value, max_discount, start_date, end_date, usage_limit } = req.body;
+    const { code, coupon_code, discount_type, discount_value, min_order_amount, start_date, end_date, usage_limit } = req.body;
+    const couponCode = code || coupon_code;
 
-    if (!coupon_code || !discount_type || discount_value === undefined) {
-      return res.status(400).json({ detail: 'coupon_code, discount_type và discount_value là bắt buộc' });
+    if (!couponCode || !discount_type || discount_value === undefined || !end_date) {
+      return res.status(400).json({ detail: 'code, discount_type, discount_value and end_date are required' });
     }
 
     const result = await query(
       `INSERT INTO Coupons
-         (coupon_code, discount_type, discount_value, min_order_value, max_discount, start_date, end_date, usage_limit, used_count, status)
-       OUTPUT INSERTED.coupon_id, INSERTED.coupon_code, INSERTED.discount_type,
-              CAST(INSERTED.discount_value AS FLOAT) AS discount_value, INSERTED.status
-       VALUES (@coupon_code, @discount_type, @discount_value, @min_order_value, @max_discount, @start_date, @end_date, @usage_limit, 0, 1)`,
+         (code, discount_type, discount_value, min_order_amount, start_date, end_date, usage_limit, used_count)
+       OUTPUT INSERTED.coupon_id, INSERTED.code, INSERTED.discount_type,
+              CAST(INSERTED.discount_value AS FLOAT) AS discount_value
+       VALUES (@code, @discount_type, @discount_value, @min_order_amount, @start_date, @end_date, @usage_limit, 0)`,
       {
-        coupon_code:     { type: sql.NVarChar(50), value: coupon_code },
-        discount_type:   { type: sql.VarChar(20),  value: discount_type },
-        discount_value:  { type: sql.Decimal(18,2), value: discount_value },
-        min_order_value: { type: sql.Decimal(18,2), value: min_order_value || null },
-        max_discount:    { type: sql.Decimal(18,2), value: max_discount || null },
-        start_date:      { type: sql.DateTime,     value: start_date ? new Date(start_date) : new Date() },
-        end_date:        { type: sql.DateTime,     value: end_date ? new Date(end_date) : null },
-        usage_limit:     { type: sql.Int,          value: usage_limit || null },
+        code:             { type: sql.NVarChar(50), value: couponCode },
+        discount_type:    { type: sql.VarChar(20), value: discount_type },
+        discount_value:   { type: sql.Decimal(18, 2), value: discount_value },
+        min_order_amount: { type: sql.Decimal(18, 2), value: min_order_amount || 0 },
+        start_date:       { type: sql.Date, value: start_date ? new Date(start_date) : new Date() },
+        end_date:         { type: sql.Date, value: new Date(end_date) },
+        usage_limit:      { type: sql.Int, value: usage_limit || null },
       }
     );
 
@@ -334,4 +414,13 @@ async function createCoupon(req, res) {
   }
 }
 
-module.exports = { confirmPayment, getPaymentHistory, validateCoupon, getCoupons, createCoupon, create_payment_url, vnpay_return, vnpay_ipn };
+module.exports = {
+  confirmPayment,
+  getPaymentHistory,
+  validateCoupon,
+  getCoupons,
+  createCoupon,
+  createPaymentUrl,
+  vnpayVerify,
+  vnpayIpn,
+};

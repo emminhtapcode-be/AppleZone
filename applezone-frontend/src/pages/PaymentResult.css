@@ -1,0 +1,287 @@
+.payment-result-page {
+  padding: 120px 20px 60px;
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payment-result-card {
+  max-width: 520px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 48px 40px;
+  border-radius: 24px;
+  text-align: center;
+  animation: cardSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cardSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Loading state ────────────────────────────────────────────────────────── */
+
+.payment-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.payment-loading h2 {
+  font-size: 1.4rem;
+  margin-bottom: 0;
+}
+
+.payment-loading p {
+  color: var(--text-muted);
+}
+
+.payment-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Icon animations ─────────────────────────────────────────────────────── */
+
+.payment-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+}
+
+/* Success checkmark */
+.checkmark-svg {
+  width: 80px;
+  height: 80px;
+}
+
+.checkmark-circle {
+  stroke: #34c759;
+  stroke-width: 2;
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  animation: strokeCircle 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.checkmark-check {
+  stroke: #34c759;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: strokeCheck 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards;
+}
+
+@keyframes strokeCircle {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes strokeCheck {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Failed crossmark */
+.crossmark-svg {
+  width: 80px;
+  height: 80px;
+}
+
+.crossmark-circle {
+  stroke: #ff453a;
+  stroke-width: 2;
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  animation: strokeCircle 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.crossmark-x {
+  stroke: #ff453a;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 56;
+  stroke-dashoffset: 56;
+  animation: strokeX 0.4s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards;
+}
+
+@keyframes strokeX {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Success icon glow pulse */
+.payment-icon--success {
+  filter: drop-shadow(0 0 20px rgba(52, 199, 89, 0.3));
+  animation: glowPulseGreen 2s ease-in-out infinite 1s;
+}
+
+@keyframes glowPulseGreen {
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(52, 199, 89, 0.3)); }
+  50%      { filter: drop-shadow(0 0 30px rgba(52, 199, 89, 0.5)); }
+}
+
+/* Failed icon glow pulse */
+.payment-icon--failed {
+  filter: drop-shadow(0 0 20px rgba(255, 69, 58, 0.3));
+  animation: glowPulseRed 2s ease-in-out infinite 1s;
+}
+
+@keyframes glowPulseRed {
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(255, 69, 58, 0.3)); }
+  50%      { filter: drop-shadow(0 0 30px rgba(255, 69, 58, 0.5)); }
+}
+
+/* ── Typography ──────────────────────────────────────────────────────────── */
+
+.payment-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.payment-subtitle {
+  color: var(--text-muted);
+  font-size: 1rem;
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+.payment-subtitle strong {
+  color: var(--accent-cyan);
+}
+
+/* ── Transaction details ─────────────────────────────────────────────────── */
+
+.payment-details {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 32px;
+  text-align: left;
+}
+
+.payment-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+}
+
+.payment-detail-row:not(:last-child) {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.detail-label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.detail-value {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-main);
+}
+
+.detail-value.highlight {
+  color: var(--accent-cyan);
+  font-size: 1.1rem;
+}
+
+.detail-value.error-code {
+  color: #ff453a;
+  font-family: monospace;
+  font-size: 0.95rem;
+}
+
+/* ── Action buttons ──────────────────────────────────────────────────────── */
+
+.payment-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payment-actions .btn-primary {
+  display: block;
+  width: 100%;
+  padding: 14px 32px;
+  background: var(--accent-cyan);
+  color: #000;
+  font-weight: 600;
+  font-size: 1rem;
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.3s ease;
+  text-decoration: none;
+}
+
+.payment-actions .btn-primary:hover {
+  background: #00d4ee;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.3);
+  color: #000;
+}
+
+.payment-actions .btn-secondary {
+  display: block;
+  width: 100%;
+  padding: 14px 32px;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.95rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.3s ease;
+  text-decoration: none;
+}
+
+.payment-actions .btn-secondary:hover {
+  color: var(--text-main);
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .payment-result-card {
+    padding: 32px 24px;
+    margin: 0 12px;
+  }
+
+  .payment-title {
+    font-size: 1.5rem;
+  }
+
+  .payment-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .checkmark-svg,
+  .crossmark-svg {
+    width: 64px;
+    height: 64px;
+  }
+}

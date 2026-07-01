@@ -116,7 +116,7 @@ CREATE TABLE Payments (
     payment_id INT IDENTITY(1,1) PRIMARY KEY,
     order_id INT NOT NULL REFERENCES Orders(order_id),
     payment_method VARCHAR(20) NOT NULL
-    CHECK (payment_method IN ('COD','banking','ewallet','installment')),
+    CHECK (payment_method IN ('COD','banking','ewallet','installment','VNPay')),
     amount DECIMAL(18,2) NOT NULL,
     payment_status VARCHAR(20) NOT NULL DEFAULT 'pending'
     CHECK (payment_status IN ('pending','completed','failed')),

@@ -13,7 +13,7 @@ import Login from '../pages/Login';
 import Register from '../pages/Register';
 import NotFound from '../pages/NotFound';
 import Profile from '../pages/Profile';
-import PaymentReturn from '../pages/PaymentReturn';
+import PaymentResult from '../pages/PaymentResult';
 
 const AppRoutes = () => {
   return (
@@ -26,8 +26,9 @@ const AppRoutes = () => {
           <Route path="products/:id" element={<ProductDetail />} />
           <Route path="cart" element={<Cart />} />
           <Route path="my" element={<Profile />} />
-          <Route path="payment/success" element={<PaymentReturn status="success" />} />
-          <Route path="payment/failed" element={<PaymentReturn status="failed" />} />
+
+          {/* VNPay redirect về đây với query params */}
+          <Route path="payment/result" element={<PaymentResult />} />
         </Route>
         
         {/* Auth Routes without MainLayout */}

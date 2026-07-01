@@ -1,7 +1,7 @@
 const sql = require('mssql');
 const { query, getPool } = require('../config/db');
 
-const ORDER_STATUSES = ['Pending', 'Confirmed', 'Shipping', 'Delivered', 'Cancelled'];
+const ORDER_STATUSES = ['pending', 'confirmed', 'shipping', 'delivered', 'cancelled'];
 
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
 async function createOrder(req, res) {
@@ -124,7 +124,7 @@ async function createOrder(req, res) {
               CAST(INSERTED.discount_amount AS FLOAT) AS discount_amount,
               CAST(INSERTED.final_amount AS FLOAT) AS final_amount,
               INSERTED.order_status, INSERTED.payment_status, INSERTED.created_at
-       VALUES (@user_id, @addr_id, @coupon_id, @total, @discount, @final, 'Pending', 'Unpaid')`,
+       VALUES (@user_id, @addr_id, @coupon_id, @total, @discount, @final, 'pending', 'unpaid')`,
       {
         user_id:   { type: sql.Int, value: user_id },
         addr_id:   { type: sql.Int, value: final_address_id },
@@ -158,7 +158,7 @@ async function createOrder(req, res) {
     }
 
     await txQuery(
-      `INSERT INTO OrderTracking (order_id, status, note) VALUES (@order_id, 'Pending', 'Order created')`,
+      `INSERT INTO OrderTracking (order_id, status, note) VALUES (@order_id, 'pending', 'Order created')`,
       { order_id: { type: sql.Int, value: order_id } }
     );
 
@@ -290,9 +290,9 @@ async function cancelOrder(req, res) {
     }
 
     const order = orderRes.recordset[0];
-    if (order.order_status !== 'Pending') {
+    if (order.order_status !== 'pending') {
       await transaction.rollback();
-      return res.status(400).json({ detail: 'Chỉ có thể hủy đơn ở trạng thái Pending' });
+      return res.status(400).json({ detail: 'Chỉ có thể hủy đơn ở trạng thái pending' });
     }
 
     // Hoàn lại kho (cộng số lượng quantity vào stock_quantity)
@@ -306,11 +306,11 @@ async function cancelOrder(req, res) {
 
     // Cập nhật trạng thái đơn hàng thành Cancelled
     await txQuery(`
-      UPDATE Orders SET order_status = 'Cancelled' WHERE order_id = @order_id
+      UPDATE Orders SET order_status = 'cancelled' WHERE order_id = @order_id
     `, { order_id: { type: sql.Int, value: order_id } });
 
     await txQuery(
-      `INSERT INTO OrderTracking (order_id, status, note) VALUES (@order_id, 'Cancelled', 'Customer cancelled the order')`,
+      `INSERT INTO OrderTracking (order_id, status, note) VALUES (@order_id, 'cancelled', 'Customer cancelled the order')`,
       { order_id: { type: sql.Int, value: order_id } }
     );
 
@@ -327,7 +327,7 @@ async function cancelOrder(req, res) {
 async function updateOrderStatus(req, res) {
   try {
     const order_id = parseInt(req.params.id);
-    const { status } = req.body;
+    const status = req.body.status ? String(req.body.status).toLowerCase() : null;
 
     if (!status || !ORDER_STATUSES.includes(status)) {
       return res.status(400).json({
@@ -358,10 +358,10 @@ async function updateOrderStatus(req, res) {
     );
 
     // Tự động tạo Bảo hành (Warranties) khi đơn hàng chuyển sang Confirmed
-    if (status === 'Confirmed') {
+    if (status === 'confirmed') {
       await query(
         `INSERT INTO Warranties (order_item_id, serial_number, start_date, end_date, status)
-         SELECT oi.order_item_id, UPPER(NEWID()), CAST(GETDATE() AS DATE), CAST(DATEADD(YEAR, 1, GETDATE()) AS DATE), 'Active'
+         SELECT oi.order_item_id, UPPER(NEWID()), CAST(GETDATE() AS DATE), CAST(DATEADD(YEAR, 1, GETDATE()) AS DATE), 'active'
          FROM OrderItems oi
          WHERE oi.order_id = @order_id
            AND NOT EXISTS (SELECT 1 FROM Warranties w WHERE w.order_item_id = oi.order_item_id)`,
